@@ -32,11 +32,12 @@ type Step struct {
 	URL       string            `yaml:"url"`
 	Headers   map[string]string `yaml:"headers"`
 	Query     map[string]string `yaml:"query"`
-	Body      any               `yaml:"body"`
-	Form      map[string]string `yaml:"form"`
-	Multipart map[string]string `yaml:"multipart"`
-	BodyRaw   string            `yaml:"body_raw"`
-	BodyFile  string            `yaml:"body_file"`
+	Body           any               `yaml:"body"`
+	Form           map[string]string `yaml:"form"`
+	Multipart      map[string]string `yaml:"multipart"`
+	BodyRaw        string            `yaml:"body_raw"`
+	BodyFile       string            `yaml:"body_file"`
+	FollowRedirect *bool             `yaml:"follow_redirect"`
 	Extract   map[string]string `yaml:"extract"`
 	Print     string            `yaml:"print"`
 	Assert    *Assert           `yaml:"assert"`

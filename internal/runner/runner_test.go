@@ -223,25 +223,77 @@ func TestTimeout(t *testing.T) {
 	}
 }
 
-func TestRedirectDisabled(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func redirectServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/redirect" {
 			http.Redirect(w, r, "/dest", http.StatusFound)
 			return
 		}
 		w.WriteHeader(200)
 	}))
+}
+
+func TestNoFollowRedirectByDefault(t *testing.T) {
+	srv := redirectServer(t)
 	defer srv.Close()
 
-	follow := false
+	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect"}
+	resp, err := Execute(step, emptyCfg(), vars.NewStore())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status != http.StatusFound {
+		t.Errorf("expected 302 (no redirect), got %d", resp.Status)
+	}
+}
+
+func TestFollowRedirectViaConfig(t *testing.T) {
+	srv := redirectServer(t)
+	defer srv.Close()
+
+	follow := true
 	cfg := &schema.Config{FollowRedirects: &follow}
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect"}
 	resp, err := Execute(step, cfg, vars.NewStore())
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
+	if resp.Status != http.StatusOK {
+		t.Errorf("expected 200 (followed redirect), got %d", resp.Status)
+	}
+}
+
+func TestFollowRedirectViaStep(t *testing.T) {
+	srv := redirectServer(t)
+	defer srv.Close()
+
+	follow := true
+	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect", FollowRedirect: &follow}
+	resp, err := Execute(step, emptyCfg(), vars.NewStore())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Errorf("expected 200 (followed redirect), got %d", resp.Status)
+	}
+}
+
+func TestStepFollowRedirectOverridesConfig(t *testing.T) {
+	srv := redirectServer(t)
+	defer srv.Close()
+
+	// Config says follow, step says don't.
+	cfgFollow := true
+	cfg := &schema.Config{FollowRedirects: &cfgFollow}
+	stepNoFollow := false
+	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect", FollowRedirect: &stepNoFollow}
+	resp, err := Execute(step, cfg, vars.NewStore())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
 	if resp.Status != http.StatusFound {
-		t.Errorf("expected 302, got %d", resp.Status)
+		t.Errorf("expected 302 (step overrides config), got %d", resp.Status)
 	}
 }
 

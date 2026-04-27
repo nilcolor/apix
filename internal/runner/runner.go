@@ -42,8 +42,9 @@ type Runner struct {
 	client *http.Client
 }
 
-// New creates a Runner from the resolved Config.
-func New(cfg *schema.Config) *Runner {
+// New creates a Runner. followRedirects controls whether the client follows
+// HTTP redirects; call effectiveFollowRedirects to resolve step+config precedence.
+func New(cfg *schema.Config, followRedirects bool) *Runner {
 	timeout := cfg.Timeout.Duration
 	if timeout == 0 {
 		timeout = 30 * time.Second
@@ -56,7 +57,7 @@ func New(cfg *schema.Config) *Runner {
 	}
 
 	redirectPolicy := func(req *http.Request, via []*http.Request) error {
-		if cfg.FollowRedirects != nil && !*cfg.FollowRedirects {
+		if !followRedirects {
 			return http.ErrUseLastResponse
 		}
 		if len(via) >= 10 {
@@ -74,10 +75,21 @@ func New(cfg *schema.Config) *Runner {
 	}
 }
 
+// effectiveFollowRedirects resolves redirect behavior with step > config > default (false).
+func effectiveFollowRedirects(step *schema.Step, cfg *schema.Config) bool {
+	if step.FollowRedirect != nil {
+		return *step.FollowRedirect
+	}
+	if cfg.FollowRedirects != nil {
+		return *cfg.FollowRedirects
+	}
+	return false
+}
+
 // Execute performs the HTTP request described by step, interpolating all fields
 // from the variable store and applying config defaults.
 func Execute(step *schema.Step, cfg *schema.Config, store *vars.Store) (*Response, error) {
-	r := New(cfg)
+	r := New(cfg, effectiveFollowRedirects(step, cfg))
 	return r.execute(step, cfg, store)
 }
 
