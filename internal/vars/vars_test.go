@@ -83,7 +83,7 @@ func TestBuildStorePriorityOrder(t *testing.T) {
 
 func TestBuildStoreEnvResolution(t *testing.T) {
 	t.Setenv("MY_SECRET", "s3cr3t")
-	f := makeFile(map[string]string{"pw": "$ENV_MY_SECRET"})
+	f := makeFile(map[string]string{"pw": "$MY_SECRET"})
 	s, err := BuildStore(f, nil)
 	if err != nil {
 		t.Fatalf("BuildStore: %v", err)
@@ -94,15 +94,25 @@ func TestBuildStoreEnvResolution(t *testing.T) {
 }
 
 func TestBuildStoreMissingEnvError(t *testing.T) {
-	// ensure var is unset
 	t.Setenv("APIX_TEST_MISSING_VAR", "")
-	f := makeFile(map[string]string{"pw": "$ENV_APIX_TEST_MISSING_VAR"})
+	f := makeFile(map[string]string{"pw": "$APIX_TEST_MISSING_VAR"})
 	_, err := BuildStore(f, nil)
 	if err == nil {
 		t.Fatal("expected error for missing env var")
 	}
 	if !strings.Contains(err.Error(), "APIX_TEST_MISSING_VAR") {
 		t.Errorf("error should name the var: %v", err)
+	}
+}
+
+func TestBuildStoreStaticValueNotResolved(t *testing.T) {
+	f := makeFile(map[string]string{"key": "JUST_A_STRING"})
+	s, err := BuildStore(f, nil)
+	if err != nil {
+		t.Fatalf("BuildStore: %v", err)
+	}
+	if v, _ := s.Get("key"); v != "JUST_A_STRING" {
+		t.Errorf("static value should not be treated as env ref: %q", v)
 	}
 }
 

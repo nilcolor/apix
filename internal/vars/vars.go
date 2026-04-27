@@ -45,7 +45,7 @@ func (s *Store) Merge(other *Store) {
 
 // BuildStore builds a Store from a fully-resolved RequestFile and CLI overrides.
 // Priority (highest wins): cliVars → file.Variables → included-file variables.
-// $ENV_FOO references in Variables are resolved via os.Getenv; missing values error.
+// $FOO references in Variables are resolved via os.Getenv; missing values error.
 //
 // The caller must invoke godotenv.Load before BuildStore so --env values are present
 // in the OS environment.
@@ -71,12 +71,12 @@ func BuildStore(file *schema.RequestFile, cliVars map[string]string) (*Store, er
 	return s, nil
 }
 
-// resolveEnvRef resolves $ENV_FOO references via os.Getenv.
+// resolveEnvRef resolves $FOO references via os.Getenv.
 func resolveEnvRef(key, value string) (string, error) {
-	if !strings.HasPrefix(value, "$ENV_") {
+	if !strings.HasPrefix(value, "$") {
 		return value, nil
 	}
-	envName := strings.TrimPrefix(value, "$ENV_")
+	envName := strings.TrimPrefix(value, "$")
 	envVal := os.Getenv(envName)
 	if envVal == "" {
 		return "", fmt.Errorf("vars: environment variable %q (referenced by %q) is not set or empty", envName, key)

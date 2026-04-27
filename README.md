@@ -25,8 +25,8 @@ make build          # produces bin/apix
 config:
   base_url: https://api.example.com
 variables:
-  username: $ENV_USERNAME
-  password: $ENV_PASSWORD
+  username: $USERNAME
+  password: $PASSWORD
 steps:
   - name: login
     method: POST
