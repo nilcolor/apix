@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"strings"
 	"time"
@@ -37,6 +38,11 @@ func Run(steps []schema.Step, cfg *schema.Config, store *vars.Store, opts Option
 		stderr = os.Stderr
 	}
 
+	var jar http.CookieJar
+	if cfg.UseCookieJar {
+		jar, _ = cookiejar.New(nil)
+	}
+
 	start := time.Now()
 	var results []output.StepResult
 	fromReached := opts.From == ""
@@ -56,7 +62,7 @@ func Run(steps []schema.Step, cfg *schema.Config, store *vars.Store, opts Option
 		if opts.DryRun {
 			result = dryRunStep(step, cfg, store)
 		} else {
-			result = executeStep(step, cfg, store)
+			result = executeStep(step, cfg, store, jar)
 		}
 
 		// Propagate extracted values into the store before print so that
@@ -147,8 +153,8 @@ func stepFailed(r output.StepResult) bool {
 
 // executeStep performs an HTTP request, extracts values, and evaluates assertions.
 // Errors (network, extraction) are captured in StepResult.Error rather than returned.
-func executeStep(step schema.Step, cfg *schema.Config, store *vars.Store) output.StepResult {
-	resp, err := runner.Execute(&step, cfg, store)
+func executeStep(step schema.Step, cfg *schema.Config, store *vars.Store, jar http.CookieJar) output.StepResult {
+	resp, err := runner.Execute(&step, cfg, store, jar)
 	if err != nil {
 		return output.StepResult{
 			Name:   step.Name,

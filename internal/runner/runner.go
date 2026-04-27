@@ -42,9 +42,9 @@ type Runner struct {
 	client *http.Client
 }
 
-// New creates a Runner. followRedirects controls whether the client follows
-// HTTP redirects; call effectiveFollowRedirects to resolve step+config precedence.
-func New(cfg *schema.Config, followRedirects bool) *Runner {
+// New creates a Runner. followRedirects controls redirect behavior; jar, when
+// non-nil, is shared across all requests made by this runner (cookie jar mode).
+func New(cfg *schema.Config, followRedirects bool, jar http.CookieJar) *Runner {
 	timeout := cfg.Timeout.Duration
 	if timeout == 0 {
 		timeout = 30 * time.Second
@@ -71,6 +71,7 @@ func New(cfg *schema.Config, followRedirects bool) *Runner {
 			Timeout:       timeout,
 			Transport:     transport,
 			CheckRedirect: redirectPolicy,
+			Jar:           jar,
 		},
 	}
 }
@@ -87,9 +88,9 @@ func effectiveFollowRedirects(step *schema.Step, cfg *schema.Config) bool {
 }
 
 // Execute performs the HTTP request described by step, interpolating all fields
-// from the variable store and applying config defaults.
-func Execute(step *schema.Step, cfg *schema.Config, store *vars.Store) (*Response, error) {
-	r := New(cfg, effectiveFollowRedirects(step, cfg))
+// from the variable store and applying config defaults. jar may be nil.
+func Execute(step *schema.Step, cfg *schema.Config, store *vars.Store, jar http.CookieJar) (*Response, error) {
+	r := New(cfg, effectiveFollowRedirects(step, cfg), jar)
 	return r.execute(step, cfg, store)
 }
 

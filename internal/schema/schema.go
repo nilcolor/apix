@@ -22,6 +22,7 @@ type Config struct {
 	FollowRedirects *bool             `yaml:"follow_redirects"`
 	TLSVerify       *bool             `yaml:"tls_verify"`
 	Headers         map[string]string `yaml:"headers"`
+	UseCookieJar    bool              `yaml:"use_cookie_jar"`
 }
 
 // Step represents a single HTTP request.
