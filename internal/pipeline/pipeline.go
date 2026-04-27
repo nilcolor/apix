@@ -59,8 +59,20 @@ func Run(steps []schema.Step, cfg *schema.Config, store *vars.Store, opts Option
 			result = executeStep(step, cfg, store)
 		}
 
+		// Propagate extracted values into the store before print so that
+		// {{ }} templates in print: can reference this step's own extracted vars.
+		for k, v := range result.Extracted {
+			store.Set(k, v)
+		}
+
 		if step.Print != "" && result.Response != nil {
-			printed, printErr := extract.PrintSource(step.Print, result.Response)
+			var printed string
+			var printErr error
+			if strings.Contains(step.Print, "{{") {
+				printed, printErr = vars.Interpolate(step.Print, store)
+			} else {
+				printed, printErr = extract.PrintSource(step.Print, result.Response)
+			}
 			if printErr != nil {
 				fmt.Fprintf(stderr, "warning: print %q: %v\n", step.Print, printErr)
 			} else {
@@ -69,11 +81,6 @@ func Run(steps []schema.Step, cfg *schema.Config, store *vars.Store, opts Option
 		}
 
 		results = append(results, result)
-
-		// Propagate extracted values into the store for subsequent steps.
-		for k, v := range result.Extracted {
-			store.Set(k, v)
-		}
 
 		if shouldStop(result, step, opts) {
 			break
