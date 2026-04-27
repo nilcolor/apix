@@ -403,3 +403,89 @@ func TestDurationCaptured(t *testing.T) {
 		t.Errorf("duration should be > 0, got %v", resp.Duration)
 	}
 }
+
+func TestBodyFile(t *testing.T) {
+	srv := echoServer(t)
+	defer srv.Close()
+
+	tmp, err := os.CreateTemp("", "apix-body-file-*.json")
+	if err != nil {
+		t.Fatalf("createtemp: %v", err)
+	}
+	defer os.Remove(tmp.Name())
+	_, _ = tmp.WriteString(`{"user":"{{ username }}","role":"admin"}`)
+	tmp.Close()
+
+	store := storeWith("username", "alice")
+	step := &schema.Step{
+		Method:   "POST",
+		URL:      srv.URL + "/submit",
+		BodyFile: tmp.Name(),
+	}
+	resp, err := Execute(step, emptyCfg(), store)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if resp.Status != 200 {
+		t.Errorf("status: %d", resp.Status)
+	}
+	var echo map[string]any
+	_ = json.Unmarshal(resp.Body, &echo)
+	if echo["body"] != `{"user":"alice","role":"admin"}` {
+		t.Errorf("body: %v", echo["body"])
+	}
+}
+
+func TestBodyFileContentType(t *testing.T) {
+	var gotCT string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCT = r.Header.Get("Content-Type")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	tmp, err := os.CreateTemp("", "apix-body-file-ct-*.json")
+	if err != nil {
+		t.Fatalf("createtemp: %v", err)
+	}
+	defer os.Remove(tmp.Name())
+	_, _ = tmp.WriteString(`{"ok":true}`)
+	tmp.Close()
+
+	step := &schema.Step{Method: "POST", URL: srv.URL + "/", BodyFile: tmp.Name()}
+	_, err = Execute(step, emptyCfg(), vars.NewStore())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.HasPrefix(gotCT, "application/json") {
+		t.Errorf("Content-Type: %q", gotCT)
+	}
+}
+
+func TestBodyFileMissing(t *testing.T) {
+	step := &schema.Step{
+		Method:   "POST",
+		URL:      "http://localhost/",
+		BodyFile: "/nonexistent/path/payload.json",
+	}
+	_, err := Execute(step, emptyCfg(), vars.NewStore())
+	if err == nil {
+		t.Fatal("expected error for missing body_file")
+	}
+	if !strings.Contains(err.Error(), "body_file read") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestBodyFileWithBodyError(t *testing.T) {
+	step := &schema.Step{
+		Method:   "POST",
+		URL:      "http://localhost/",
+		Body:     map[string]any{"x": 1},
+		BodyFile: "/some/file.json",
+	}
+	_, err := Execute(step, emptyCfg(), vars.NewStore())
+	if err == nil {
+		t.Fatal("expected error for multiple body kinds")
+	}
+}

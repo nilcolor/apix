@@ -205,8 +205,11 @@ func buildBody(step *schema.Step, store *vars.Store) (body []byte, contentType s
 	if step.BodyRaw != "" {
 		count++
 	}
+	if step.BodyFile != "" {
+		count++
+	}
 	if count > 1 {
-		return nil, "", fmt.Errorf("runner: at most one of body/form/multipart/body_raw may be set")
+		return nil, "", fmt.Errorf("runner: at most one of body/form/multipart/body_raw/body_file may be set")
 	}
 
 	if step.Body != nil {
@@ -244,6 +247,22 @@ func buildBody(step *schema.Step, store *vars.Store) (body []byte, contentType s
 			return nil, "", fmt.Errorf("runner: body_raw: %w", err)
 		}
 		return []byte(raw), "text/plain", nil
+	}
+
+	if step.BodyFile != "" {
+		path, err := vars.Interpolate(step.BodyFile, store)
+		if err != nil {
+			return nil, "", fmt.Errorf("runner: body_file path: %w", err)
+		}
+		raw, err := os.ReadFile(path) //nolint:gosec // path is user-provided, intentional
+		if err != nil {
+			return nil, "", fmt.Errorf("runner: body_file read %q: %w", path, err)
+		}
+		interpolated, err := vars.Interpolate(string(raw), store)
+		if err != nil {
+			return nil, "", fmt.Errorf("runner: body_file interpolate: %w", err)
+		}
+		return []byte(interpolated), "application/json", nil
 	}
 
 	return nil, "", nil

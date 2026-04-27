@@ -36,6 +36,7 @@ type Step struct {
 	Form      map[string]string `yaml:"form"`
 	Multipart map[string]string `yaml:"multipart"`
 	BodyRaw   string            `yaml:"body_raw"`
+	BodyFile  string            `yaml:"body_file"`
 	Extract   map[string]string `yaml:"extract"`
 	Print     string            `yaml:"print"`
 	Assert    *Assert           `yaml:"assert"`

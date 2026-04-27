@@ -1,0 +1,8 @@
+{
+  "request_id": "{{ $uuid }}",
+  "source": "apix",
+  "data": {
+    "message": "hello from body_file",
+    "items": [1, 2, 3]
+  }
+}

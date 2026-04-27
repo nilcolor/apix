@@ -34,6 +34,17 @@ steps:
         "$.body.slideshow.title": "Sample Slide Show"
         "$.body.slideshow.author": "Yours Truly"
 
+  - name: post_from_file
+    method: POST
+    path: /post
+    body_file: scrolls/payloads/sample.json   # {{ }} placeholders are interpolated before sending
+    assert:
+      status: 200
+      body:
+        "$.body.json.source": apix
+        "$.body.json.request_id":
+          exists: true
+
   - name: retry_policy_demo
     method: GET
     path: /uuid
