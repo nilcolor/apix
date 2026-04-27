@@ -171,6 +171,24 @@ func TestBaseURLAndPath(t *testing.T) {
 	}
 }
 
+func TestPathInterpolation(t *testing.T) {
+	srv := echoServer(t)
+	defer srv.Close()
+
+	store := storeWith("report_uuid", "abc-123")
+	cfg := &schema.Config{BaseURL: srv.URL}
+	step := &schema.Step{Method: "GET", Path: "/api/v3/reports/{{ report_uuid }}/report-details"}
+	resp, err := Execute(step, cfg, store)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var echo map[string]any
+	_ = json.Unmarshal(resp.Body, &echo)
+	if echo["path"] != "/api/v3/reports/abc-123/report-details" {
+		t.Errorf("path: %v", echo["path"])
+	}
+}
+
 func TestURLOverridesBaseURL(t *testing.T) {
 	srv := echoServer(t)
 	defer srv.Close()
