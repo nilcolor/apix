@@ -1,0 +1,11 @@
+config:
+  base_url: https://api.example.com
+  timeout: 10s
+
+variables:
+  key: value
+
+steps:
+  - name: step1
+    method: GET
+    path: /items

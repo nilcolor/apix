@@ -1,0 +1,6 @@
+include:
+  - ./base.yaml
+
+config:
+  follow_redirects: false
+  tls_verify: false

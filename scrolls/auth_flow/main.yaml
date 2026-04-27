@@ -1,0 +1,41 @@
+# Auth flow — includes auth.yaml to log in, then uses the extracted token.
+#
+# Run:
+#   apix invoke examples/auth_flow/main.yaml
+#   apix invoke examples/auth_flow/main.yaml --var username=alice
+#   apix invoke examples/auth_flow/main.yaml --verbose
+#   apix invoke examples/auth_flow/main.yaml --output json
+#   apix invoke examples/auth_flow/main.yaml --output json | jq '.summary'
+#
+# Filtering (included login step always runs):
+#   apix invoke examples/auth_flow/main.yaml --step bearer_auth
+#   apix invoke examples/auth_flow/main.yaml --skip get_with_token
+#   apix invoke examples/auth_flow/main.yaml --from get_with_token
+#
+# Failure + fail-fast:
+#   apix invoke examples/auth_flow/main.yaml --fail-fast
+#
+# Exit code demo:
+#   apix invoke examples/auth_flow/main.yaml; echo "exit: $?"  # expects 0
+
+include:
+  - auth.yaml
+
+steps:
+  - name: bearer_auth
+    method: GET
+    path: /bearer
+    headers:
+      Authorization: "Bearer {{ auth_token }}"
+    assert:
+      status: 200
+      body:
+        "$.body.authenticated": true
+
+  - name: get_with_token
+    method: GET
+    path: /get
+    query:
+      user: "{{ auth_token }}"
+    assert:
+      status: 200

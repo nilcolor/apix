@@ -1,0 +1,16 @@
+config:
+  base_url: https://base.example.com
+  timeout: 5s
+  follow_redirects: true
+  headers:
+    Content-Type: application/json
+    X-Base: base
+
+variables:
+  base_var: from_base
+  shared: base_value
+
+steps:
+  - name: base_step
+    method: GET
+    path: /base

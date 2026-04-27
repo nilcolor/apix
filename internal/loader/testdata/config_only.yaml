@@ -1,0 +1,4 @@
+config:
+  base_url: https://shared.example.com
+  headers:
+    Authorization: Bearer shared_token

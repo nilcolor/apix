@@ -1,0 +1,33 @@
+# Extraction example — POST to capture a value, then use it in a subsequent GET.
+#
+# Run:
+#   apix invoke examples/extract.yaml
+#   apix invoke examples/extract.yaml --verbose           # see full request/response
+#   apix invoke examples/extract.yaml --output json       # machine-readable output
+#   apix invoke examples/extract.yaml --var client_id=my-app  # override the variable
+
+config:
+  base_url: https://httpbin.org
+  timeout: 10s
+variables:
+  client_id: apix-demo
+
+steps:
+  - name: register_client
+    method: POST
+    path: /post
+    body:
+      client_id: "{{ client_id }}"
+      scope: read
+    extract:
+      registered_id: "$.body.json.client_id"
+    assert:
+      status: 200
+
+  - name: call_with_extracted_id
+    method: GET
+    path: /get
+    query:
+      client: "{{ registered_id }}"
+    assert:
+      status: 200

@@ -1,0 +1,24 @@
+# binaries
+/apix
+bin/
+dist/
+
+# test coverage
+*.out
+coverage.html
+
+# env files
+.env
+.env.*
+
+# editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# claude code
+.claude/
+
+# internal planning docs
+docs

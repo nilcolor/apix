@@ -1,0 +1,30 @@
+# Auth include — simulates a login step that extracts an auth token.
+# Not meant to be run directly; include it from main.yaml.
+#
+# Override credentials at the CLI:
+#   apix invoke examples/auth_flow/main.yaml --var username=alice --var password=s3cret
+#
+# Or load from a .env file:
+#   echo "USERNAME=alice"   >  examples/auth_flow/.env
+#   echo "PASSWORD=s3cret" >>  examples/auth_flow/.env
+#   (then change variables below to: username: $ENV_USERNAME  password: $ENV_PASSWORD)
+#   apix invoke examples/auth_flow/main.yaml --env examples/auth_flow/.env
+
+config:
+  base_url: https://httpbin.org
+  timeout: 10s
+variables:
+  username: demo_user
+  password: demo_pass
+
+steps:
+  - name: login
+    method: POST
+    path: /post
+    body:
+      username: "{{ username }}"
+      password: "{{ password }}"
+    extract:
+      auth_token: "$.body.json.username"
+    assert:
+      status: 200

@@ -1,0 +1,16 @@
+include:
+  - ./base.yaml
+
+config:
+  base_url: https://current.example.com
+  headers:
+    X-Current: current
+
+variables:
+  current_var: from_current
+  shared: current_value
+
+steps:
+  - name: current_step
+    method: POST
+    path: /current

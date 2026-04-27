@@ -1,0 +1,45 @@
+# Basic example — standalone GET requests with assertions.
+#
+# Run:
+#   apix invoke examples/basic.yaml
+#   apix invoke examples/basic.yaml --output json
+#   apix invoke examples/basic.yaml --dry-run
+#   apix invoke examples/basic.yaml --step get_uuid        # only that step
+#   apix invoke examples/basic.yaml --skip get_sample_json # skip that step
+#   apix invoke examples/basic.yaml --from get_sample_json # start from that step
+#
+# Exit code demo:
+#   apix invoke examples/basic.yaml; echo "exit: $?"      # expects 0
+
+config:
+  base_url: https://httpbin.org
+  timeout: 10s
+
+steps:
+  - name: get_uuid
+    method: GET
+    path: /uuid
+    assert:
+      status: 200
+      body:
+        "$.body.uuid":
+          exists: true
+
+  - name: get_sample_json
+    method: GET
+    path: /json
+    assert:
+      status: 200
+      body:
+        "$.body.slideshow.title": "Sample Slide Show"
+        "$.body.slideshow.author": "Yours Truly"
+
+  - name: retry_policy_demo
+    method: GET
+    path: /uuid
+    # retry: is parsed but not yet executed — apix warns on stderr.
+    retry:
+      max_attempts: 3
+      delay: 1s
+    assert:
+      status: 200

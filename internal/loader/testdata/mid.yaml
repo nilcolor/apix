@@ -1,0 +1,13 @@
+include:
+  - ./base.yaml
+
+config:
+  timeout: 20s
+
+variables:
+  mid_var: from_mid
+
+steps:
+  - name: mid_step
+    method: GET
+    path: /mid

@@ -1,0 +1,7 @@
+include:
+  - ./circular_b.yaml
+
+steps:
+  - name: a
+    method: GET
+    path: /a

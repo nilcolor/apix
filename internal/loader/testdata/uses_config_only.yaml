@@ -1,0 +1,7 @@
+include:
+  - ./config_only.yaml
+
+steps:
+  - name: uses_config
+    method: GET
+    path: /data

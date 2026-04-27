@@ -1,0 +1,13 @@
+include:
+  - ./mid.yaml
+
+config:
+  base_url: https://top.example.com
+
+variables:
+  top_var: from_top
+
+steps:
+  - name: top_step
+    method: DELETE
+    path: /top

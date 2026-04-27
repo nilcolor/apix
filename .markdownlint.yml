@@ -1,0 +1,14 @@
+# markdownlint configuration
+# https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+default: true
+
+# MD013: Line length — disabled; long lines are fine in code blocks and tables.
+MD013: false
+
+# MD033: Inline HTML — not used, but disabled to avoid noise from doc examples.
+MD033: false
+
+# MD041: First line should be a top-level heading — disabled for CLAUDE.md
+# which intentionally starts with a heading that includes the project name.
+MD041: false

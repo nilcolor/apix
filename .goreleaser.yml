@@ -1,0 +1,23 @@
+version: 2
+
+builds:
+  - id: apix
+    main: ./cmd/apix
+    binary: apix
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.revision={{.Tag}}-{{.ShortCommit}}-{{ trimsuffix (replace (replace .CommitDate "-" "") ":" "") "Z" }}
+
+archives:
+  - id: apix
+    builds:
+      - apix
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}

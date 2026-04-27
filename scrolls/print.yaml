@@ -1,0 +1,28 @@
+# Print example — inspect response bodies without --verbose.
+#
+# Run:
+#   apix invoke examples/print.yaml                  # full body to stdout, pretty output to stderr
+#   apix invoke examples/print.yaml 2>/dev/null      # only the printed body on stdout
+#   apix invoke examples/print.yaml 2>/dev/null | jq '.slideshow.title'  # pipe to jq
+#   apix invoke examples/print.yaml --output json    # printed value captured under "printed" in JSON
+
+config:
+  base_url: https://httpbin.org
+  timeout: 10s
+
+steps:
+  - name: inspect_full_body
+    method: GET
+    path: /json
+    # print: "$.body" pretty-prints the entire JSON response to stdout.
+    print: "$.body"
+    assert:
+      status: 200
+
+  - name: extract_and_print_field
+    method: GET
+    path: /uuid
+    # print: with a sub-path prints just that value — useful for scalars you want to capture.
+    print: "$.body.uuid"
+    assert:
+      status: 200

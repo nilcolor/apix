@@ -1,0 +1,63 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - asciicheck     # ASCII only symbols allowed
+    - bodyclose      # HTTP response body must be closed
+    - copyloopvar    # loop variable capture (Go 1.22+)
+    - errcheck       # unchecked errors
+    - gocritic       # style, performance, and correctness checks
+    - gocyclo        # cyclomatic complexity
+    - gosec          # security issues
+    - govet          # go vet correctness checks
+    - ineffassign    # assignments whose value is never used
+    - misspell       # typos in comments and strings
+    - nilerr         # returning nil when err != nil
+    - prealloc       # slice pre-allocation hints
+    - revive         # style and convention enforcement
+    - staticcheck    # comprehensive static analysis
+    - unparam        # unused function parameters
+    - unused         # unexported identifiers never referenced
+
+  settings:
+    gocyclo:
+      min-complexity: 20
+    gocritic:
+      enabled-tags:
+        - performance
+        - style
+      disabled-checks:
+        - wrapperFunc
+        - hugeParam
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: early-return
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: empty-block
+
+  exclusions:
+    rules:
+      # Writing to terminal (fmt + color library): if the write fails there is nothing to do.
+      - linters: [errcheck]
+        text: "Fprintf|Fprintln|Fprint"
+      # gosec G104 on terminal writes: unactionable, errcheck covers this more precisely.
+      - linters: [gosec]
+        text: "G104"
+        path: internal/output/output\.go
+      # Closing readers/response bodies: errors on close are not actionable.
+      - linters: [errcheck]
+        text: "\\.Close"
+      # for-range index access is always in bounds; gosec's static analysis is too conservative.
+      - linters: [gosec]
+        text: "G602"
+      # Tests: encoding, file cleanup, and subprocess handling are not meaningful to check.
+      - path: _test\.go
+        linters: [errcheck, gosec]
