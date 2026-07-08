@@ -89,7 +89,7 @@ func TestRunCmdHappyPath(t *testing.T) {
 	usersFile := twoFileSetup(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(usersFile), &stdout, &stderr)
+	code := invokeCmd(makeCmd(usersFile), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -116,7 +116,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f), nil, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("want exit 1 for assertion failure, got %d", code)
 	}
@@ -125,7 +125,7 @@ steps:
 // TestRunCmdFileNotFound: missing file returns exit 2.
 func TestRunCmdFileNotFound(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd("/no/such/file.yaml"), &stdout, &stderr)
+	code := invokeCmd(makeCmd("/no/such/file.yaml"), nil, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("want exit 2 for missing file, got %d", code)
 	}
@@ -137,7 +137,7 @@ func TestRunCmdMalformedVar(t *testing.T) {
 	f := writeFile(t, dir, "empty.yaml", "steps: []\n")
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Var = []string{"noequalssign"} }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Var = []string{"noequalssign"} }), nil, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("want exit 2 for malformed --var, got %d", code)
 	}
@@ -149,7 +149,7 @@ func TestRunCmdBadTimeout(t *testing.T) {
 	f := writeFile(t, dir, "empty.yaml", "steps: []\n")
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Timeout = "notaduration" }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Timeout = "notaduration" }), nil, &stdout, &stderr)
 	if code != 2 {
 		t.Fatalf("want exit 2 for bad --timeout, got %d", code)
 	}
@@ -182,7 +182,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.FailFast = true }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.FailFast = true }), nil, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("want exit 1, got %d", code)
 	}
@@ -212,7 +212,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.NoColor = true }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.NoColor = true }), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -237,7 +237,7 @@ func TestRunCmdOutputJSON(t *testing.T) {
 	usersFile := twoFileSetup(t, srv.URL)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(usersFile, func(r *InvokeCommand) { r.Output = "json" }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(usersFile, func(r *InvokeCommand) { r.Output = "json" }), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -289,7 +289,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Timeout = "30s" }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Timeout = "30s" }), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0 with --timeout 30s, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -318,7 +318,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Var = []string{"user_id=overridden"} }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Var = []string{"user_id=overridden"} }), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -348,7 +348,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -383,7 +383,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -413,7 +413,7 @@ steps:
 	f := writeFile(t, dir, "test.yaml", yamlContent)
 
 	var stdout, stderr bytes.Buffer
-	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Output = "json" }), &stdout, &stderr)
+	code := invokeCmd(makeCmd(f, func(r *InvokeCommand) { r.Output = "json" }), nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
 	}
@@ -430,5 +430,79 @@ steps:
 	}
 	if envelope.Steps[0].Printed != "ok" {
 		t.Errorf("expected printed=ok in JSON output, got: %q", envelope.Steps[0].Printed)
+	}
+}
+
+// TestRunCmdAskPrompt: an ask: step reads its value from stdin end-to-end and
+// a later step can use it via {{ }} interpolation.
+func TestRunCmdAskPrompt(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/request-code", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/submit-code", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-OTP") != "123456" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	dir := t.TempDir()
+	yamlContent := fmt.Sprintf(`
+config:
+  base_url: %s
+steps:
+  - name: request_code
+    method: POST
+    path: /request-code
+    ask:
+      - var: otp_code
+        prompt: "Enter OTP:"
+  - name: submit_code
+    method: POST
+    path: /submit-code
+    headers:
+      X-OTP: "{{ otp_code }}"
+`, srv.URL)
+	f := writeFile(t, dir, "test.yaml", yamlContent)
+
+	var stdout, stderr bytes.Buffer
+	code := invokeCmd(makeCmd(f), strings.NewReader("123456\n"), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d\nstderr: %s", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Enter OTP:") {
+		t.Errorf("want prompt text on stderr, got: %q", stderr.String())
+	}
+}
+
+// TestRunCmdAskNoInput: an ask: step with no stdin data available returns exit 2.
+func TestRunCmdAskNoInput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	yamlContent := fmt.Sprintf(`
+config:
+  base_url: %s
+steps:
+  - name: request_code
+    method: GET
+    path: /
+    ask:
+      - var: otp_code
+        prompt: "Enter OTP:"
+`, srv.URL)
+	f := writeFile(t, dir, "test.yaml", yamlContent)
+
+	var stdout, stderr bytes.Buffer
+	code := invokeCmd(makeCmd(f), strings.NewReader(""), &stdout, &stderr)
+	if code != 2 {
+		t.Fatalf("want exit 2 for empty stdin, got %d\nstderr: %s", code, stderr.String())
 	}
 }

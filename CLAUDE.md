@@ -60,7 +60,7 @@ internal/
 - Unit tests live alongside source as `*_test.go` in the same package.
 - `internal/loader/testdata/` holds YAML fixtures for loader edge cases.
 - HTTP tests use `httptest.NewServer` — no mocking of the HTTP client.
-- `cmd/apix/run_test.go` calls `runCmd()` directly (no binary build) for fast integration tests.
+- `cmd/apix/invoke_test.go` calls `invokeCmd()` directly (no binary build) for fast integration tests.
 - `cmd/apix/main_test.go` builds the binary via `exec.Command("go", "build", ...)` for smoke tests.
 - Table-driven tests are used in `assert` and `schema` for operator/unmarshal coverage.
 - `output` tests set `color.NoColor = true` and use `t.Cleanup` to restore it.
@@ -71,7 +71,9 @@ internal/
 Fields named `password`, `secret`, `token`, or `authorization` (case-insensitive substring match)
 are masked to `***` in request snapshots at capture time inside `runner`. This applies to both
 request headers and JSON body keys. The masking happens before the snapshot is stored in
-`Response.Request`, so verbose output and JSON output never expose raw secrets.
+`Response.Request`, so verbose output and JSON output never expose raw secrets. The same
+heuristic (`runner.IsSensitive`) also masks matching variable names in the `Asked` map reported
+for `ask:` steps.
 
 ## Variable interpolation
 

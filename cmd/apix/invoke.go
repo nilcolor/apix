@@ -18,13 +18,13 @@ import (
 )
 
 func (r *InvokeCommand) Execute(_ []string) error {
-	os.Exit(invokeCmd(r, os.Stdout, os.Stderr))
+	os.Exit(invokeCmd(r, os.Stdin, os.Stdout, os.Stderr))
 	return nil // unreachable
 }
 
 // invokeCmd executes the run command and returns an exit code.
 // Separated from Execute so integration tests can call it without os.Exit.
-func invokeCmd(r *InvokeCommand, stdout, stderr io.Writer) int {
+func invokeCmd(r *InvokeCommand, stdin io.Reader, stdout, stderr io.Writer) int {
 	if r.NoColor {
 		color.NoColor = true
 	}
@@ -80,6 +80,7 @@ func invokeCmd(r *InvokeCommand, stdout, stderr io.Writer) int {
 		Step:     r.Step,
 		Skip:     r.Skip,
 		From:     r.From,
+		Stdin:    stdin,
 		Stderr:   stderr,
 	}
 

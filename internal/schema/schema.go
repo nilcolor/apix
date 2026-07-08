@@ -27,23 +27,24 @@ type Config struct {
 
 // Step represents a single HTTP request.
 type Step struct {
-	Name      string            `yaml:"name"`
-	Method    string            `yaml:"method"`
-	Path      string            `yaml:"path"`
-	URL       string            `yaml:"url"`
-	Headers   map[string]string `yaml:"headers"`
-	Query     map[string]string `yaml:"query"`
+	Name           string            `yaml:"name"`
+	Method         string            `yaml:"method"`
+	Path           string            `yaml:"path"`
+	URL            string            `yaml:"url"`
+	Headers        map[string]string `yaml:"headers"`
+	Query          map[string]string `yaml:"query"`
 	Body           any               `yaml:"body"`
 	Form           map[string]string `yaml:"form"`
 	Multipart      map[string]string `yaml:"multipart"`
 	BodyRaw        string            `yaml:"body_raw"`
 	BodyFile       string            `yaml:"body_file"`
 	FollowRedirect *bool             `yaml:"follow_redirect"`
-	Extract   map[string]string `yaml:"extract"`
-	Print     string            `yaml:"print"`
-	Assert    *Assert           `yaml:"assert"`
-	OnError   string            `yaml:"on_error"`
-	Retry     *Retry            `yaml:"retry"`
+	Extract        map[string]string `yaml:"extract"`
+	Ask            []AskItem         `yaml:"ask"`
+	Print          string            `yaml:"print"`
+	Assert         *Assert           `yaml:"assert"`
+	OnError        string            `yaml:"on_error"`
+	Retry          *Retry            `yaml:"retry"`
 
 	// Origin is set by the loader ("included" or "current"); never serialized.
 	Origin string `yaml:"-"`
@@ -51,9 +52,9 @@ type Step struct {
 
 // Assert holds the assertions for a step, keyed by target (status, body path, header name).
 type Assert struct {
-	Status  *Assertion            `yaml:"status"`
-	Body    map[string]Assertion  `yaml:"body"`
-	Headers map[string]Assertion  `yaml:"headers"`
+	Status  *Assertion           `yaml:"status"`
+	Body    map[string]Assertion `yaml:"body"`
+	Headers map[string]Assertion `yaml:"headers"`
 }
 
 // validOperators is the set of recognized operator keys in the long-form assertion.
@@ -112,9 +113,16 @@ func (a *Assertion) UnmarshalYAML(value *yaml.Node) error {
 	}
 }
 
+// AskItem prompts the user for a value at run time and stores it under Var.
+// Prompting is skipped when Var is already present in the store (e.g. via --var).
+type AskItem struct {
+	Var    string `yaml:"var"`
+	Prompt string `yaml:"prompt"`
+}
+
 // Retry holds retry configuration for a step (parsed but not executed in v1).
 type Retry struct {
-	MaxAttempts int     `yaml:"max_attempts"`
+	MaxAttempts int      `yaml:"max_attempts"`
 	Delay       Duration `yaml:"delay"`
 	Until       *Assert  `yaml:"until"`
 }

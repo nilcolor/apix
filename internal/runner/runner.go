@@ -367,8 +367,8 @@ func interpolateAny(v any, store *vars.Store) (any, error) {
 	}
 }
 
-// isSensitive reports whether a field name is sensitive (case-insensitive match).
-func isSensitive(name string) bool {
+// IsSensitive reports whether a field name is sensitive (case-insensitive match).
+func IsSensitive(name string) bool {
 	lower := strings.ToLower(name)
 	for _, k := range sensitiveKeys {
 		if strings.Contains(lower, k) {
@@ -381,7 +381,7 @@ func isSensitive(name string) bool {
 // maskHeaders returns a copy of headers with sensitive header values redacted.
 func maskHeaders(h http.Header) http.Header {
 	for name := range h {
-		if isSensitive(name) {
+		if IsSensitive(name) {
 			h[name] = []string{"***"}
 		}
 	}
@@ -410,7 +410,7 @@ func maskBody(body []byte, contentType string) []byte {
 
 func maskMap(m map[string]any) {
 	for k, v := range m {
-		if isSensitive(k) {
+		if IsSensitive(k) {
 			m[k] = "***"
 			continue
 		}

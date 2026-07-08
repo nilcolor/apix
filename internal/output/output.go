@@ -23,6 +23,7 @@ type StepResult struct {
 	DurationMs int64
 	Assertions []assert.Result
 	Extracted  map[string]string
+	Asked      map[string]string
 	Printed    string
 	Request    *runner.RequestSnapshot
 	Response   *runner.Response
@@ -42,6 +43,7 @@ var (
 	colorPass    = color.New(color.FgGreen)
 	colorFail    = color.New(color.FgRed)
 	colorExtract = color.New(color.FgYellow)
+	colorAsk     = color.New(color.FgCyan)
 	colorMeta    = color.New(color.FgHiBlack)
 	colorHeader  = color.New(color.FgWhite, color.Bold)
 )
@@ -63,6 +65,9 @@ func Pretty(results []StepResult, summary Summary, w, printOut io.Writer) {
 		}
 		for k, v := range results[i].Extracted {
 			colorExtract.Fprintf(w, "  → %-10s = %s\n", k, v)
+		}
+		for k, v := range results[i].Asked {
+			colorAsk.Fprintf(w, "  ? %-10s = %s\n", k, v)
 		}
 		if results[i].Printed != "" && printOut != nil {
 			fmt.Fprintln(printOut, indentLines(results[i].Printed, "  "))
@@ -96,6 +101,9 @@ func PrettyVerbose(results []StepResult, summary Summary, w, printOut io.Writer)
 		for k, v := range results[i].Extracted {
 			colorExtract.Fprintf(w, "  → %-10s = %s\n", k, v)
 		}
+		for k, v := range results[i].Asked {
+			colorAsk.Fprintf(w, "  ? %-10s = %s\n", k, v)
+		}
 		if results[i].Printed != "" && printOut != nil {
 			fmt.Fprintln(printOut, indentLines(results[i].Printed, "  "))
 		}
@@ -119,6 +127,7 @@ func JSON(results []StepResult, summary Summary, w io.Writer) error {
 		DurationMs int64             `json:"duration_ms"`
 		Assertions []assertionJSON   `json:"assertions"`
 		Extracted  map[string]string `json:"extracted,omitempty"`
+		Asked      map[string]string `json:"asked,omitempty"`
 		Printed    string            `json:"printed,omitempty"`
 		Error      string            `json:"error,omitempty"`
 	}
@@ -152,13 +161,14 @@ func JSON(results []StepResult, summary Summary, w io.Writer) error {
 			DurationMs: results[i].DurationMs,
 			Assertions: assertions,
 			Extracted:  results[i].Extracted,
+			Asked:      results[i].Asked,
 			Printed:    results[i].Printed,
 			Error:      results[i].Error,
 		}
 	}
 
 	out := envelope{
-		Steps: steps,
+		Steps:   steps,
 		Summary: summaryJSON(summary),
 	}
 

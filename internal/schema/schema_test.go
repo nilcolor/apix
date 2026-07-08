@@ -370,6 +370,33 @@ steps:
 	}
 }
 
+// TestAskBlock round-trips a step's ask: list, preserving order.
+func TestAskBlock(t *testing.T) {
+	src := `
+steps:
+  - name: request_code
+    method: POST
+    path: /request-validation-code
+    ask:
+      - var: otp_code
+        prompt: "Enter the OTP sent via email:"
+      - var: backup_code
+        prompt: "Enter the backup code:"
+`
+	var f RequestFile
+	unmarshal(t, src, &f)
+	s := f.Steps[0]
+	if len(s.Ask) != 2 {
+		t.Fatalf("want 2 ask items, got %d", len(s.Ask))
+	}
+	if s.Ask[0].Var != "otp_code" || s.Ask[0].Prompt != "Enter the OTP sent via email:" {
+		t.Errorf("ask[0]: %+v", s.Ask[0])
+	}
+	if s.Ask[1].Var != "backup_code" || s.Ask[1].Prompt != "Enter the backup code:" {
+		t.Errorf("ask[1]: %+v", s.Ask[1])
+	}
+}
+
 // TestFullFile round-trips the complete two-file example from the design doc.
 func TestFullFile(t *testing.T) {
 	authYAML := `

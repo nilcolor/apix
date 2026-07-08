@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,6 +28,8 @@ type Options struct {
 	From     string
 	// Stderr receives warning messages; defaults to os.Stderr when nil.
 	Stderr io.Writer
+	// Stdin supplies answers for ask: prompts; defaults to os.Stdin when nil.
+	Stdin io.Reader
 }
 
 // Run executes steps in order, applying filtering, variable extraction, and assertions.
@@ -36,6 +39,10 @@ func Run(steps []schema.Step, cfg *schema.Config, store *vars.Store, opts Option
 	stderr := opts.Stderr
 	if stderr == nil {
 		stderr = os.Stderr
+	}
+	stdin := opts.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
 	}
 
 	var jar http.CookieJar
@@ -69,6 +76,16 @@ func Run(steps []schema.Step, cfg *schema.Config, store *vars.Store, opts Option
 		// {{ }} templates in print: can reference this step's own extracted vars.
 		for k, v := range result.Extracted {
 			store.Set(k, v)
+		}
+
+		// ask: only runs for steps that actually succeeded, and never during
+		// --dry-run (no real request was made, so there's nothing to gate on).
+		if len(step.Ask) > 0 && result.Error == "" && !opts.DryRun {
+			asked, askErr := askStep(step.Ask, store, stdin, stderr)
+			result.Asked = asked
+			if askErr != nil {
+				result.Error = askErr.Error()
+			}
 		}
 
 		if step.Print != "" && result.Response != nil {
@@ -187,6 +204,54 @@ func executeStep(step schema.Step, cfg *schema.Config, store *vars.Store, jar ht
 		Response:   resp,
 		Error:      errStr,
 	}
+}
+
+// askStep prompts for each item not already present in the store, storing answers
+// as variables. Already-set vars (e.g. via --var) are reported but never prompted.
+// Errors reading stdin stop processing further items and are returned to the caller,
+// which records them on StepResult.Error following the same on_error semantics as
+// extraction errors.
+func askStep(items []schema.AskItem, store *vars.Store, stdin io.Reader, stderr io.Writer) (map[string]string, error) {
+	asked := make(map[string]string, len(items))
+	reader := bufio.NewReader(stdin)
+
+	for _, item := range items {
+		if item.Var == "" {
+			return asked, fmt.Errorf("ask: var must not be empty")
+		}
+
+		if v, ok := store.Get(item.Var); ok {
+			asked[item.Var] = reportValue(item.Var, v)
+			continue
+		}
+
+		prompt, err := vars.Interpolate(item.Prompt, store)
+		if err != nil {
+			prompt = item.Prompt
+			fmt.Fprintf(stderr, "warning: ask %q prompt: %v\n", item.Var, err)
+		}
+		fmt.Fprintf(stderr, "%s ", prompt)
+
+		line, readErr := reader.ReadString('\n')
+		line = strings.TrimRight(line, "\r\n")
+		if readErr != nil && line == "" {
+			return asked, fmt.Errorf("ask %q: %w", item.Var, readErr)
+		}
+
+		store.Set(item.Var, line)
+		asked[item.Var] = reportValue(item.Var, line)
+	}
+
+	return asked, nil
+}
+
+// reportValue masks the value for display when the var name matches the same
+// sensitive-field heuristic used for request/response snapshot masking.
+func reportValue(name, value string) string {
+	if runner.IsSensitive(name) {
+		return "***"
+	}
+	return value
 }
 
 // dryRunStep builds a StepResult from interpolated fields without sending an HTTP request.
