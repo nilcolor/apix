@@ -257,6 +257,55 @@ func TestHeaderMissingFails(t *testing.T) {
 	mustFail(t, results)
 }
 
+// --- Source/Operator fields (used by output.go to render the resolved expression) ---
+
+func TestResultSourceAndOperatorStatus(t *testing.T) {
+	r := makeResp(200, `{}`, nil)
+	results := Evaluate(&schema.Assert{Status: ptr(scalar(200))}, r, testStore)
+	if results[0].Source != "status" || results[0].Operator != "equals" {
+		t.Errorf("got Source=%q Operator=%q, want status/equals", results[0].Source, results[0].Operator)
+	}
+}
+
+func TestResultSourceAndOperatorBody(t *testing.T) {
+	r := makeResp(200, `{"age":21}`, nil)
+	asserts := &schema.Assert{Body: map[string]schema.Assertion{"$.body.age": op("gte", 18)}}
+	results := Evaluate(asserts, r, testStore)
+	if results[0].Source != "$.body.age" || results[0].Operator != "gte" {
+		t.Errorf("got Source=%q Operator=%q, want $.body.age/gte", results[0].Source, results[0].Operator)
+	}
+}
+
+func TestResultSourceAndOperatorHeader(t *testing.T) {
+	r := makeResp(200, `{}`, map[string]string{"Content-Type": "application/json"})
+	asserts := &schema.Assert{Headers: map[string]schema.Assertion{"Content-Type": scalar("application/json")}}
+	results := Evaluate(asserts, r, testStore)
+	if results[0].Source != "header.Content-Type" || results[0].Operator != "equals" {
+		t.Errorf("got Source=%q Operator=%q, want header.Content-Type/equals", results[0].Source, results[0].Operator)
+	}
+}
+
+func TestResultSourceAndOperatorMissingPathHasNoOperator(t *testing.T) {
+	r := makeResp(200, `{}`, nil)
+	asserts := &schema.Assert{Body: map[string]schema.Assertion{"$.body.missing": scalar("x")}}
+	results := Evaluate(asserts, r, testStore)
+	if results[0].Operator != "" {
+		t.Errorf("execution error should leave Operator empty, got %q", results[0].Operator)
+	}
+}
+
+func TestResultSourceAndOperatorExistsOnMissingPath(t *testing.T) {
+	r := makeResp(200, `{}`, nil)
+	asserts := &schema.Assert{Body: map[string]schema.Assertion{"$.body.missing": op("exists", false)}}
+	results := Evaluate(asserts, r, testStore)
+	if results[0].Operator != "exists" || results[0].Source != "$.body.missing" {
+		t.Errorf("got Source=%q Operator=%q, want $.body.missing/exists", results[0].Source, results[0].Operator)
+	}
+	if !results[0].Passed {
+		t.Errorf("exists:false on a missing path should pass")
+	}
+}
+
 // --- Interpolation ---
 
 func TestInterpolationScalarValue(t *testing.T) {

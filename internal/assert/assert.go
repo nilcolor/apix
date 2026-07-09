@@ -19,6 +19,8 @@ import (
 // Result holds the outcome of a single assertion check.
 type Result struct {
 	Check    string
+	Source   string
+	Operator string
 	Expected any
 	Actual   any
 	Passed   bool
@@ -41,7 +43,7 @@ func Evaluate(asserts *schema.Assert, resp *runner.Response, store *vars.Store) 
 		if err != nil {
 			results = append(results, Result{Check: "status", Passed: false, Message: err.Error()})
 		} else {
-			results = append(results, check("status", any(resp.Status), resolved))
+			results = append(results, check("status", "status", any(resp.Status), resolved))
 		}
 	}
 
@@ -56,7 +58,7 @@ func Evaluate(asserts *schema.Assert, resp *runner.Response, store *vars.Store) 
 		if err != nil {
 			// For "exists" operator, a missing path means exists=false.
 			if resolved.IsOperator && resolved.Operator == "exists" {
-				results = append(results, applyOperator("body "+path, nil, "exists", resolved.Operand))
+				results = append(results, applyOperator("body "+path, path, nil, "exists", resolved.Operand))
 			} else {
 				results = append(results, Result{
 					Check:   "body " + path,
@@ -66,7 +68,7 @@ func Evaluate(asserts *schema.Assert, resp *runner.Response, store *vars.Store) 
 			}
 			continue
 		}
-		results = append(results, check("body "+path, actual, resolved))
+		results = append(results, check("body "+path, path, actual, resolved))
 	}
 
 	// Header assertions.
@@ -85,7 +87,7 @@ func Evaluate(asserts *schema.Assert, resp *runner.Response, store *vars.Store) 
 			})
 			continue
 		}
-		results = append(results, check("header "+name, actual, resolved))
+		results = append(results, check("header "+name, "header."+name, actual, resolved))
 	}
 
 	return results
@@ -170,7 +172,7 @@ func interpolateList(v any, store *vars.Store) (any, error) {
 }
 
 // check evaluates a single Assertion against actual and returns a Result.
-func check(label string, actual any, assertion schema.Assertion) Result {
+func check(label, source string, actual any, assertion schema.Assertion) Result {
 	if !assertion.IsOperator {
 		// Scalar shorthand → equality.
 		passed := equal(actual, assertion.Value)
@@ -180,18 +182,20 @@ func check(label string, actual any, assertion schema.Assertion) Result {
 		}
 		return Result{
 			Check:    label,
+			Source:   source,
+			Operator: "equals",
 			Expected: assertion.Value,
 			Actual:   actual,
 			Passed:   passed,
 			Message:  msg,
 		}
 	}
-	return applyOperator(label, actual, assertion.Operator, assertion.Operand)
+	return applyOperator(label, source, actual, assertion.Operator, assertion.Operand)
 }
 
 // applyOperator dispatches to the appropriate operator implementation.
-func applyOperator(label string, actual any, op string, operand any) Result {
-	r := Result{Check: label, Expected: operand, Actual: actual}
+func applyOperator(label, source string, actual any, op string, operand any) Result {
+	r := Result{Check: label, Source: source, Operator: op, Expected: operand, Actual: actual}
 
 	switch op {
 	case "equals":

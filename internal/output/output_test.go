@@ -206,6 +206,60 @@ func TestPrettyExtractedValues(t *testing.T) {
 	}
 }
 
+// TestPrettyAssertionExpressionFormat verifies passing/failing assertion lines render
+// as the resolved "source operator operand" expression, not the bare Check label.
+func TestPrettyAssertionExpressionFormat(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	r := StepResult{
+		Name: "check", Method: "GET", URL: "http://x", Status: 200, DurationMs: 10,
+		Assertions: []assert.Result{
+			{Check: "status", Source: "status", Operator: "equals", Expected: 200, Actual: 200, Passed: true},
+			{Check: "body $.body.role", Source: "$.body.role", Operator: "not_equals", Expected: "admin", Actual: "viewer", Passed: true},
+			{Check: "body $.body.tags", Source: "$.body.tags", Operator: "in", Expected: []any{"a", "b"}, Actual: "a", Passed: true},
+			{Check: "body $.body.token", Source: "$.body.token", Operator: "exists", Expected: true, Actual: true, Passed: true},
+			{Check: "body $.body.age", Source: "$.body.age", Operator: "gte", Expected: 18, Actual: 4, Passed: false},
+		},
+	}
+	var buf bytes.Buffer
+	Pretty([]StepResult{r}, Summary{Total: 1, Passed: 0, Failed: 1}, &buf, nil)
+	out := buf.String()
+
+	for _, want := range []string{
+		"✓ status == 200",
+		"✓ $.body.role != admin",
+		"✓ $.body.tags in [a, b]",
+		"✓ $.body.token exists true",
+		"✗ $.body.age >= 18  (got 4)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("want %q in output, got:\n%s", want, out)
+		}
+	}
+}
+
+// TestPrettyAssertionFallbackForExecutionErrors verifies assertions with no Operator
+// (execution errors: missing path, invalid regexp, etc.) keep the old Check: Message form.
+func TestPrettyAssertionFallbackForExecutionErrors(t *testing.T) {
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	r := StepResult{
+		Name: "check", Method: "GET", URL: "http://x", Status: 200, DurationMs: 10,
+		Assertions: []assert.Result{
+			{Check: "body $.body.missing", Passed: false, Message: `JSONPath "$.body.missing" matched nothing`},
+		},
+	}
+	var buf bytes.Buffer
+	Pretty([]StepResult{r}, Summary{Total: 1, Passed: 0, Failed: 1}, &buf, nil)
+	out := buf.String()
+
+	if !strings.Contains(out, `✗ body $.body.missing: JSONPath "$.body.missing" matched nothing`) {
+		t.Errorf("want fallback Check: Message form, got:\n%s", out)
+	}
+}
+
 // TestPrettyVerboseDump checks that request/response sections appear in verbose mode.
 func TestPrettyVerboseDump(t *testing.T) {
 	color.NoColor = true

@@ -205,15 +205,59 @@ func printStepStatus(r StepResult, w io.Writer) {
 	colorMeta.Fprintf(w, "  ← %d %s  (%dms)\n", r.Status, statusText, r.DurationMs)
 }
 
-func printAssertion(a assert.Result, w io.Writer) {
-	if a.Passed {
-		colorPass.Fprintf(w, "  ✓ %s\n", a.Check)
-	} else {
-		msg := a.Message
-		if msg == "" {
-			msg = fmt.Sprintf("expected %v, got %v", a.Expected, a.Actual)
+var operatorSymbols = map[string]string{
+	"equals":     "==",
+	"not_equals": "!=",
+	"gte":        ">=",
+	"lte":        "<=",
+	"gt":         ">",
+	"lt":         "<",
+}
+
+func displayOperator(op string) string {
+	if sym, ok := operatorSymbols[op]; ok {
+		return sym
+	}
+	return op
+}
+
+func formatOperand(v any) string {
+	switch t := v.(type) {
+	case []any:
+		parts := make([]string, len(t))
+		for i, item := range t {
+			parts[i] = fmt.Sprintf("%v", item)
 		}
-		colorFail.Fprintf(w, "  ✗ %s: %s\n", a.Check, msg)
+		return "[" + strings.Join(parts, ", ") + "]"
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprintf("%v", t)
+	}
+}
+
+func printAssertion(a assert.Result, w io.Writer) {
+	if a.Operator == "" {
+		if a.Passed {
+			colorPass.Fprintf(w, "  ✓ %s\n", a.Check)
+		} else {
+			msg := a.Message
+			if msg == "" {
+				msg = fmt.Sprintf("expected %v, got %v", a.Expected, a.Actual)
+			}
+			colorFail.Fprintf(w, "  ✗ %s: %s\n", a.Check, msg)
+		}
+		return
+	}
+
+	expr := fmt.Sprintf("%s %s %s", a.Source, displayOperator(a.Operator), formatOperand(a.Expected))
+	if a.Passed {
+		colorPass.Fprintf(w, "  ✓ %s\n", expr)
+	} else {
+		colorFail.Fprintf(w, "  ✗ %s  (got %v)\n", expr, a.Actual)
 	}
 }
 

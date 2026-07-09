@@ -271,19 +271,22 @@ Available in any `{{ }}` interpolation without declaration, generated fresh on e
 - `pretty` (default) — colored, human-readable, one block per step, summary line at the end.
   The `←` line is the raw HTTP response (status + timing) and is always neutral; `✓`/`✗` are
   reserved for actual assertion results, so a passing status next to a failing assertion never
-  gets miscolored:
+  gets miscolored. Each assertion line shows the resolved check itself — source, operator, and
+  operand (after `{{ }}` interpolation) — rather than a bare label, so a failure reads as
+  `✗ $.body.role == admin  (got viewer)` instead of needing you to go re-read the scroll to see
+  what was actually being compared:
 
   ```
   ● get_uuid   GET https://httpbin.org/uuid
     ← 200 OK  (940ms)
-    ✓ status
-    ✓ body $.body.uuid
+    ✓ status == 200
+    ✓ $.body.uuid exists true
 
   ● get_sample_json   GET https://httpbin.org/json
     ← 200 OK  (947ms)
-    ✓ status
-    ✓ body $.body.slideshow.title
-    ✓ body $.body.slideshow.author
+    ✓ status == 200
+    ✓ $.body.slideshow.author == Yours Truly
+    ✓ $.body.slideshow.title == Sample Slide Show
 
   ──────────────────────────────────────
     2 passed · 0 failed · 1887ms total
