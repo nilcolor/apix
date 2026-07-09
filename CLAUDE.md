@@ -28,9 +28,9 @@ staticcheck ./...
 
 ```
 cmd/apix/
-  main.go        — CLI entry: go-flags parser, RunCommand struct, subcommand registration
-  run.go         — RunCommand.Execute body: flag wiring → pipeline → output → exit code
-  run_test.go    — integration tests via runCmd() (no binary build required)
+  main.go        — CLI entry: go-flags parser, InvokeCommand struct, subcommand registration
+  invoke.go      — InvokeCommand.Execute body: flag wiring → pipeline → output → exit code
+  invoke_test.go — integration tests via invokeCmd() (no binary build required)
   main_test.go   — binary-level smoke tests (builds binary via exec.Command)
 
 internal/
@@ -54,6 +54,12 @@ internal/
 | `github.com/fatih/color` | Coloured terminal output; `color.NoColor` for `--no-color` |
 | `github.com/joho/godotenv` | `.env` file loading for `--env` flag |
 | `github.com/google/uuid` | `$uuid` built-in variable generator |
+
+## Code style
+
+No explanatory comments — not even a brief one describing why a fix or change was made
+(referencing a past bug, prior behavior, etc.). This project's default is zero such comments,
+full stop, stricter than "only comment non-obvious rationale."
 
 ## Test conventions
 
