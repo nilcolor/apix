@@ -202,23 +202,7 @@ func printStepStatus(r StepResult, w io.Writer) {
 		return
 	}
 	statusText := http.StatusText(r.Status)
-	if stepPassed(r) {
-		colorPass.Fprintf(w, "  ✓ %d %s  (%dms)\n", r.Status, statusText, r.DurationMs)
-	} else {
-		colorFail.Fprintf(w, "  ✗ %d %s  (%dms)\n", r.Status, statusText, r.DurationMs)
-	}
-}
-
-func stepPassed(r StepResult) bool {
-	if r.Error != "" {
-		return false
-	}
-	for _, a := range r.Assertions {
-		if !a.Passed {
-			return false
-		}
-	}
-	return true
+	colorMeta.Fprintf(w, "  ← %d %s  (%dms)\n", r.Status, statusText, r.DurationMs)
 }
 
 func printAssertion(a assert.Result, w io.Writer) {

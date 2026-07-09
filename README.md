@@ -269,6 +269,26 @@ Available in any `{{ }}` interpolation without declaration, generated fresh on e
 ### Output modes
 
 - `pretty` (default) — colored, human-readable, one block per step, summary line at the end.
+  The `←` line is the raw HTTP response (status + timing) and is always neutral; `✓`/`✗` are
+  reserved for actual assertion results, so a passing status next to a failing assertion never
+  gets miscolored:
+
+  ```
+  ● get_uuid   GET https://httpbin.org/uuid
+    ← 200 OK  (940ms)
+    ✓ status
+    ✓ body $.body.uuid
+
+  ● get_sample_json   GET https://httpbin.org/json
+    ← 200 OK  (947ms)
+    ✓ status
+    ✓ body $.body.slideshow.title
+    ✓ body $.body.slideshow.author
+
+  ──────────────────────────────────────
+    2 passed · 0 failed · 1887ms total
+  ```
+
 - `pretty --verbose` — adds the full request/response (headers + body) per step, with
   `password`/`secret`/`token`/`authorization`-like fields masked to `***`.
 - `json` — structured `{steps: [...], summary: {...}}` on stdout, for piping to `jq` or a CI
