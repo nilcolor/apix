@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -330,6 +332,95 @@ steps:
 	var f RequestFile
 	if err := yaml.Unmarshal([]byte(src), &f); err == nil {
 		t.Error("expected error for unknown operator, got nil")
+	}
+}
+
+// TestAssertExpressionForm covers the list-of-expression-strings alternative to the
+// mapping form, including every operator's keyword/symbol spelling.
+func TestAssertExpressionForm(t *testing.T) {
+	src := `
+steps:
+  - name: check
+    method: GET
+    path: /me
+    assert:
+      - "status == 200"
+      - "$.body.age gte 18"
+      - "$.body.age >= 18"
+      - "$.body.role != admin"
+      - "$.body.roles contains admin"
+      - "$.body.email matches '^[^@]+@[^@]+$'"
+      - "$.body.token exists true"
+      - "$.body.status in [pending, active]"
+      - "header.X-Request-Id == abc123"
+`
+	var f RequestFile
+	unmarshal(t, src, &f)
+	a := f.Steps[0].Assert
+	if a == nil {
+		t.Fatal("assert should not be nil")
+	}
+
+	if !a.Status.IsOperator || a.Status.Operator != "equals" || a.Status.Operand != "200" {
+		t.Errorf("status: got %+v", a.Status)
+	}
+
+	// The last body assertion for a given path wins ($.body.age is set twice above).
+	age := a.Body["$.body.age"]
+	if !age.IsOperator || age.Operator != "gte" || age.Operand != "18" {
+		t.Errorf("$.body.age: got %+v", age)
+	}
+
+	role := a.Body["$.body.role"]
+	if !role.IsOperator || role.Operator != "not_equals" || role.Operand != "admin" {
+		t.Errorf("$.body.role: got %+v", role)
+	}
+
+	roles := a.Body["$.body.roles"]
+	if !roles.IsOperator || roles.Operator != "contains" || roles.Operand != "admin" {
+		t.Errorf("$.body.roles: got %+v", roles)
+	}
+
+	email := a.Body["$.body.email"]
+	if !email.IsOperator || email.Operator != "matches" || email.Operand != "^[^@]+@[^@]+$" {
+		t.Errorf("$.body.email: got %+v", email)
+	}
+
+	token := a.Body["$.body.token"]
+	if !token.IsOperator || token.Operator != "exists" || token.Operand != "true" {
+		t.Errorf("$.body.token: got %+v", token)
+	}
+
+	status := a.Body["$.body.status"]
+	wantList := []any{"pending", "active"}
+	if !status.IsOperator || status.Operator != "in" || !reflect.DeepEqual(status.Operand, wantList) {
+		t.Errorf("$.body.status: got %+v, want operand %v", status, wantList)
+	}
+
+	header := a.Headers["X-Request-Id"]
+	if !header.IsOperator || header.Operator != "equals" || header.Operand != "abc123" {
+		t.Errorf("header X-Request-Id: got %+v", header)
+	}
+}
+
+// TestAssertExpressionFormErrors covers malformed expression strings.
+func TestAssertExpressionFormErrors(t *testing.T) {
+	cases := []string{
+		"$.body.role",                    // no operator
+		"== 200",                         // missing source
+		"status ==",                      // missing operand
+		"$.body.x unknown_op 1",          // unrecognized operator
+		"unknown.source == 1",            // unrecognized source prefix
+		"$.body.roles in pending, active", // in: missing brackets
+	}
+	for _, expr := range cases {
+		t.Run(expr, func(t *testing.T) {
+			src := "steps:\n  - name: t\n    method: GET\n    path: /x\n    assert:\n      - " + strconv.Quote(expr) + "\n"
+			var f RequestFile
+			if err := yaml.Unmarshal([]byte(src), &f); err == nil {
+				t.Errorf("expected error for expression %q, got nil", expr)
+			}
+		})
 	}
 }
 

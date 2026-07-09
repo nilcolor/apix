@@ -51,10 +51,66 @@ type Step struct {
 }
 
 // Assert holds the assertions for a step, keyed by target (status, body path, header name).
+//
+// It accepts two YAML forms:
+//   - a mapping, e.g. `assert: {status: 200, body: {...}}` (long-standing form)
+//   - a sequence of expression strings, e.g. `assert: ["status == 200", "$.body.age gte 18"]`
+//
+// Both forms populate the same Status/Body/Headers fields, so downstream evaluation
+// doesn't need to know which form produced a given assertion.
 type Assert struct {
 	Status  *Assertion           `yaml:"status"`
 	Body    map[string]Assertion `yaml:"body"`
 	Headers map[string]Assertion `yaml:"headers"`
+}
+
+// assertMapping is a plain alias of Assert used to decode the mapping form without
+// recursing into Assert's own UnmarshalYAML.
+type assertMapping Assert
+
+func (a *Assert) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.MappingNode:
+		var m assertMapping
+		if err := value.Decode(&m); err != nil {
+			return err
+		}
+		*a = Assert(m)
+		return nil
+
+	case yaml.SequenceNode:
+		for _, item := range value.Content {
+			if item.Kind != yaml.ScalarNode {
+				return fmt.Errorf("assert: list-form entries must be strings, got YAML node kind %v", item.Kind)
+			}
+			var expr string
+			if err := item.Decode(&expr); err != nil {
+				return err
+			}
+			target, key, assertion, err := parseAssertExpr(expr)
+			if err != nil {
+				return err
+			}
+			switch target {
+			case "status":
+				a.Status = &assertion
+			case "body":
+				if a.Body == nil {
+					a.Body = make(map[string]Assertion)
+				}
+				a.Body[key] = assertion
+			case "header":
+				if a.Headers == nil {
+					a.Headers = make(map[string]Assertion)
+				}
+				a.Headers[key] = assertion
+			}
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("assert: unexpected YAML node kind %v (must be a mapping or a sequence of expression strings)", value.Kind)
+	}
 }
 
 // validOperators is the set of recognized operator keys in the long-form assertion.

@@ -188,7 +188,7 @@ func executeStep(step schema.Step, cfg *schema.Config, store *vars.Store, jar ht
 
 	var assertions []assert.Result
 	if extErr == nil {
-		assertions = assert.Evaluate(step.Assert, resp)
+		assertions = assert.Evaluate(step.Assert, resp, store)
 	}
 
 	snap := resp.Request

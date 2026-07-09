@@ -13,6 +13,7 @@ import (
 
 	"github.com/nilcolor/apix/internal/runner"
 	"github.com/nilcolor/apix/internal/schema"
+	"github.com/nilcolor/apix/internal/vars"
 )
 
 // Result holds the outcome of a single assertion check.
@@ -25,7 +26,10 @@ type Result struct {
 }
 
 // Evaluate runs all assertions in asserts against resp and returns one Result per check.
-func Evaluate(asserts *schema.Assert, resp *runner.Response) []Result {
+// Assertion values/operands are interpolated against store before comparison, so
+// "{{ name }}" templates may reference variables (including ones extracted by earlier
+// steps) in either assertion form.
+func Evaluate(asserts *schema.Assert, resp *runner.Response, store *vars.Store) []Result {
 	if asserts == nil {
 		return nil
 	}
@@ -33,17 +37,26 @@ func Evaluate(asserts *schema.Assert, resp *runner.Response) []Result {
 
 	// Status assertion.
 	if asserts.Status != nil {
-		actual := resp.Status
-		results = append(results, check("status", any(actual), *asserts.Status))
+		resolved, err := resolveAssertion(*asserts.Status, store)
+		if err != nil {
+			results = append(results, Result{Check: "status", Passed: false, Message: err.Error()})
+		} else {
+			results = append(results, check("status", any(resp.Status), resolved))
+		}
 	}
 
 	// Body assertions — each key is a JSONPath expression.
 	for path, assertion := range asserts.Body {
+		resolved, err := resolveAssertion(assertion, store)
+		if err != nil {
+			results = append(results, Result{Check: "body " + path, Passed: false, Message: err.Error()})
+			continue
+		}
 		actual, err := bodyValue(path, resp.Body)
 		if err != nil {
 			// For "exists" operator, a missing path means exists=false.
-			if assertion.IsOperator && assertion.Operator == "exists" {
-				results = append(results, applyOperator("body "+path, nil, "exists", assertion.Operand))
+			if resolved.IsOperator && resolved.Operator == "exists" {
+				results = append(results, applyOperator("body "+path, nil, "exists", resolved.Operand))
 			} else {
 				results = append(results, Result{
 					Check:   "body " + path,
@@ -53,11 +66,16 @@ func Evaluate(asserts *schema.Assert, resp *runner.Response) []Result {
 			}
 			continue
 		}
-		results = append(results, check("body "+path, actual, assertion))
+		results = append(results, check("body "+path, actual, resolved))
 	}
 
 	// Header assertions.
 	for name, assertion := range asserts.Headers {
+		resolved, err := resolveAssertion(assertion, store)
+		if err != nil {
+			results = append(results, Result{Check: "header " + name, Passed: false, Message: err.Error()})
+			continue
+		}
 		actual, err := headerValue(name, resp.Headers)
 		if err != nil {
 			results = append(results, Result{
@@ -67,10 +85,88 @@ func Evaluate(asserts *schema.Assert, resp *runner.Response) []Result {
 			})
 			continue
 		}
-		results = append(results, check("header "+name, actual, assertion))
+		results = append(results, check("header "+name, actual, resolved))
 	}
 
 	return results
+}
+
+// resolveAssertion interpolates "{{ }}" templates in an assertion's value/operand
+// against store, coercing the result back to the Go type each operator expects:
+// bool for "exists", []any for "in", string otherwise (the comparison helpers below
+// already coerce numeric strings via toFloat64, so no further conversion is needed).
+func resolveAssertion(a schema.Assertion, store *vars.Store) (schema.Assertion, error) {
+	if !a.IsOperator {
+		v, err := interpolateAny(a.Value, store)
+		if err != nil {
+			return a, err
+		}
+		a.Value = v
+		return a, nil
+	}
+
+	var err error
+	switch a.Operator {
+	case "exists":
+		a.Operand, err = interpolateBool(a.Operand, store)
+	case "in":
+		a.Operand, err = interpolateList(a.Operand, store)
+	default:
+		a.Operand, err = interpolateAny(a.Operand, store)
+	}
+	if err != nil {
+		return a, err
+	}
+	return a, nil
+}
+
+// interpolateAny interpolates v if it's a string containing "{{"; other types (already
+// native from YAML, e.g. a bool or number literal) pass through unchanged.
+func interpolateAny(v any, store *vars.Store) (any, error) {
+	s, ok := v.(string)
+	if !ok || !strings.Contains(s, "{{") {
+		return v, nil
+	}
+	return vars.Interpolate(s, store)
+}
+
+// interpolateBool interpolates a string operand and parses the result as a bool for the
+// "exists" operator. A non-string operand (already a native YAML bool) passes through.
+func interpolateBool(v any, store *vars.Store) (any, error) {
+	s, ok := v.(string)
+	if !ok {
+		return v, nil
+	}
+	resolved, err := interpolateAny(s, store)
+	if err != nil {
+		return nil, err
+	}
+	str := resolved.(string)
+	b, err := strconv.ParseBool(strings.TrimSpace(str))
+	if err != nil {
+		// Not a recognized boolean literal — let applyOperator's type assertion
+		// report the mismatch clearly instead of failing silently here.
+		return str, nil
+	}
+	return b, nil
+}
+
+// interpolateList interpolates each string element of a []any operand for the "in"
+// operator. A non-list operand passes through unchanged.
+func interpolateList(v any, store *vars.Store) (any, error) {
+	list, ok := v.([]any)
+	if !ok {
+		return v, nil
+	}
+	out := make([]any, len(list))
+	for i, item := range list {
+		resolved, err := interpolateAny(item, store)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = resolved
+	}
+	return out, nil
 }
 
 // check evaluates a single Assertion against actual and returns a Result.

@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/nilcolor/apix/internal/schema"
 	"github.com/nilcolor/apix/internal/vars"
 )
@@ -79,6 +81,63 @@ func TestRunHappyPathExtraction(t *testing.T) {
 	}
 	if results[0].Extracted["token"] != "abc123" {
 		t.Errorf("want token=abc123, got %q", results[0].Extracted["token"])
+	}
+	for _, r := range results {
+		for _, a := range r.Assertions {
+			if !a.Passed {
+				t.Errorf("step %q: assertion %q failed: %s", r.Name, a.Check, a.Message)
+			}
+		}
+	}
+}
+
+// TestRunExpressionAssertCrossStepVariable exercises the motivating end-to-end case:
+// a list-form assert whose operand is a variable extracted by an earlier step.
+func TestRunExpressionAssertCrossStepVariable(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/build", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"clearance_id": "abc123"})
+	})
+	mux.HandleFunc("/final", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"clearance_id": "abc123"})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	var assertYAML schema.Assert
+	if err := yaml.Unmarshal([]byte(`
+- "status == 200"
+- "$.body.clearance_id == {{ a_clearance_id }}"
+`), &assertYAML); err != nil {
+		t.Fatalf("unmarshal assert: %v", err)
+	}
+
+	steps := []schema.Step{
+		{
+			Name:    "build_clearance",
+			Method:  "POST",
+			Path:    "/build",
+			Origin:  "current",
+			Extract: map[string]string{"a_clearance_id": "$.body.clearance_id"},
+			Assert:  &schema.Assert{Status: scalarAssertion()},
+		},
+		{
+			Name:   "check_final_clearance",
+			Method: "GET",
+			Path:   "/final",
+			Origin: "current",
+			Assert: &assertYAML,
+		},
+	}
+
+	results, summary, err := Run(steps, newCfg(srv.URL), vars.NewStore(), Options{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if summary.Total != 2 || summary.Passed != 2 || summary.Failed != 0 {
+		t.Errorf("summary: %+v", summary)
 	}
 	for _, r := range results {
 		for _, a := range r.Assertions {

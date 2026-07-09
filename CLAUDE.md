@@ -34,7 +34,7 @@ cmd/apix/
   main_test.go   — binary-level smoke tests (builds binary via exec.Command)
 
 internal/
-  schema/        — Go types mirroring the YAML schema; custom UnmarshalYAML on Assertion/Duration
+  schema/        — Go types mirroring the YAML schema; custom UnmarshalYAML on Assertion/Assert/Duration
   loader/        — Load(): YAML parse + recursive include resolution + config merge + Origin tagging
   vars/          — Store (map), BuildStore(), Interpolate(), built-in generators ($uuid etc.)
   runner/        — Execute(): HTTP client, body variants, sensitive-field masking in snapshots
@@ -81,8 +81,8 @@ Syntax: `{{ varname }}` (whitespace-tolerant). Lookup order: built-ins → store
 (`$uuid`, `$timestamp`, `$iso_date`, `$random_int`) are generated fresh on every interpolation
 call and cannot be shadowed by user variables.
 
-**Note:** assertion values in `assert:` blocks are NOT interpolated — they are compared as-is
-against the actual response values.
+**Note:** assertion values/operands in `assert:` blocks ARE interpolated (both YAML forms below),
+so `{{ }}` can reference any variable in the store, including one extracted by an earlier step.
 
 ## Assert body path format
 
@@ -96,6 +96,38 @@ assert:
     "$.body.data.role": admin          # ✓
     "$.data.role": admin               # ✗ — missing $.body. prefix
 ```
+
+## Assert expression form
+
+`assert:` also accepts a sequence of expression strings instead of the mapping form above.
+Both forms populate the same underlying Status/Body/Headers and can't be mixed within a
+single `assert:` block, but a scroll can use either form on a step-by-step basis:
+
+```yaml
+assert:
+  - "status == 200"
+  - "$.body.age gte 18"
+  - "$.body.clearance_id == {{ a_clearance_id }}"   # compare against a variable extracted earlier
+```
+
+Each line is `<source> <operator> <operand>`, always in that order, with the operator as its
+own whitespace-separated token. Sources use the same prefixes as `extract`: `status`,
+`$.body.<path>`, `header.<Name>`. Operands with spaces or special characters (a regex, a
+multi-word phrase) must be wrapped in matching single or double quotes; otherwise quoting is
+optional.
+
+| Meaning | Symbol | Keyword |
+|---|---|---|
+| equals / not equals | `==` `!=` | `equals` `not_equals` |
+| gte / lte / gt / lt | `>=` `<=` `>` `<` | `gte` `lte` `gt` `lt` |
+| substring / list membership | — | `contains` |
+| regex match | — | `matches` |
+| existence | — | `exists` (operand is literal `true`/`false`) |
+| value in list | — | `in` (operand is a bracket literal, e.g. `[pending, active]`) |
+| length compare | — | `length_gte` `length_lte` |
+
+There's no support for comparing two bare values with no response lookup (e.g. `{{ a }} != {{ b }}`)
+— every expression's source must resolve to `status`, a body path, or a header.
 
 ## Exit codes
 
