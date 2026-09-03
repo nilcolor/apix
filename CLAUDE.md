@@ -24,14 +24,9 @@ go build ./cmd/apix/...
 go test ./...
 ```
 
-`make lint` runs **golangci-lint**, not `staticcheck`. staticcheck is only one of the
-linters `.golangci.yml` enables, so `staticcheck ./...` can pass while `make lint` fails.
-Gate on `make lint`.
-
-The linter version is pinned in `.golangci-version`, read by both the `Makefile` and
-`.github/workflows/ci.yml`. `make lint` installs that exact version when the local one is
-missing or mismatched, so a green `make lint` means a green CI lint. Change the linter
-version by editing that file only.
+Linters are configured in `.golangci.yml`. The golangci-lint version is pinned in
+`.golangci-version`, read by both the `Makefile` and `.github/workflows/ci.yml`;
+`make lint` installs that version when the local one differs.
 
 ## Package layout
 
@@ -90,11 +85,10 @@ request headers and JSON body keys. The masking happens before the snapshot is s
 heuristic (`runner.IsSensitive`) also masks matching variable names in the `Asked` map reported
 for `ask:` steps, and in `Extracted` and hook variables.
 
-Separately, the *values* of sensitive-named variables are scrubbed at the **output boundary** — every
-formatter writes through a redacting writer, so verbose request/response dumps and silent mode's
-`print:` pass-through are covered too. Scrubbing chosen fields instead left each new field
-unprotected by default. Values under 6 characters are skipped so a short value cannot blank unrelated
-output, and longer values are replaced first so the result does not depend on map order.
+Separately, the *values* of sensitive-named variables are scrubbed at the output boundary: every
+formatter writes through a redacting writer, covering verbose request/response dumps and silent
+mode's `print:` pass-through. Values are matched in their plain and JSON-escaped forms, longest
+first. Values under 6 characters are skipped.
 
 This is output hygiene, not a security control: it protects the terminal of whoever supplied the
 secret. A value that is re-encoded rather than embedded is not caught.
@@ -172,14 +166,14 @@ accepts a string or bytes, so derivation chains compose.
 Hook variable names, and store variable names, may not collide with `request`, `builtin`, or a
 function name; both are rejected rather than silently shadowed.
 
-Hook results are strings. Numbers are formatted without an exponent — `expr` yields a float from
-any division, and scientific notation in a header value is a wire bug.
+Hook results are strings. Numbers are formatted without an exponent; `expr` yields a float from
+any division.
 
 Hook variables are committed to the store and persist past their step, the same way extracted
 values do. A later step with no hook still resolves `{{ sig }}` to the previous step's value rather
 than erroring.
 
-Hooks are not evaluated under `--dry-run`: no body is built, so any signature shown would be wrong.
+Hooks are not evaluated under `--dry-run`.
 
 ## Assert body path format
 

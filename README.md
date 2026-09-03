@@ -272,7 +272,7 @@ A hook result must be a string, so raw digest bytes are rejected — write `hex(
 not `hmac_sha256(...)`. Division yields a float: `int(builtin.timestamp_ms) / 1000` gives
 `1788437721.156`, so wrap the whole expression in `int(...)` if you want whole seconds.
 
-Hooks do not run under `--dry-run`, since no body is built and any signature shown would be wrong.
+Hooks do not run under `--dry-run`.
 
 ### `assert` — verifying responses
 
@@ -340,8 +340,7 @@ Available in any `{{ }}` interpolation without declaration:
 | `$iso_date` | Current datetime in ISO 8601 | fixed per request |
 
 The time values are fixed for the duration of a single request, so a body and a header that both
-use `{{ $timestamp }}` always agree — otherwise a signature computed over one would not match the
-other whenever the two renders happened to land either side of a second.
+use `{{ $timestamp }}` always agree.
 
 ### Output modes
 
