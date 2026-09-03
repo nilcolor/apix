@@ -337,6 +337,22 @@ steps:
 
 // TestAssertExpressionForm covers the list-of-expression-strings alternative to the
 // mapping form, including every operator's keyword/symbol spelling.
+// expectOperator asserts one parsed operator assertion. Extracted so the caller
+// stays a flat table — inlining these checks pushed it past the gocyclo limit.
+func expectOperator(t *testing.T, label string, got Assertion, operator string, operand any) {
+	t.Helper()
+	if !got.IsOperator {
+		t.Errorf("%s: expected an operator assertion, got %+v", label, got)
+		return
+	}
+	if got.Operator != operator {
+		t.Errorf("%s: operator = %q, want %q", label, got.Operator, operator)
+	}
+	if !reflect.DeepEqual(got.Operand, operand) {
+		t.Errorf("%s: operand = %v, want %v", label, got.Operand, operand)
+	}
+}
+
 func TestAssertExpressionForm(t *testing.T) {
 	src := `
 steps:
@@ -360,46 +376,29 @@ steps:
 	if a == nil {
 		t.Fatal("assert should not be nil")
 	}
-
-	if !a.Status.IsOperator || a.Status.Operator != "equals" || a.Status.Operand != "200" {
-		t.Errorf("status: got %+v", a.Status)
+	if a.Status == nil {
+		t.Fatal("status assertion should not be nil")
 	}
 
-	// The last body assertion for a given path wins ($.body.age is set twice above).
-	age := a.Body["$.body.age"]
-	if !age.IsOperator || age.Operator != "gte" || age.Operand != "18" {
-		t.Errorf("$.body.age: got %+v", age)
+	// $.body.age is asserted twice above; the last one wins.
+	cases := []struct {
+		label    string
+		got      Assertion
+		operator string
+		operand  any
+	}{
+		{"status", *a.Status, "equals", "200"},
+		{"$.body.age", a.Body["$.body.age"], "gte", "18"},
+		{"$.body.role", a.Body["$.body.role"], "not_equals", "admin"},
+		{"$.body.roles", a.Body["$.body.roles"], "contains", "admin"},
+		{"$.body.email", a.Body["$.body.email"], "matches", "^[^@]+@[^@]+$"},
+		{"$.body.token", a.Body["$.body.token"], "exists", "true"},
+		{"$.body.status", a.Body["$.body.status"], "in", []any{"pending", "active"}},
+		{"header X-Request-Id", a.Headers["X-Request-Id"], "equals", "abc123"},
 	}
 
-	role := a.Body["$.body.role"]
-	if !role.IsOperator || role.Operator != "not_equals" || role.Operand != "admin" {
-		t.Errorf("$.body.role: got %+v", role)
-	}
-
-	roles := a.Body["$.body.roles"]
-	if !roles.IsOperator || roles.Operator != "contains" || roles.Operand != "admin" {
-		t.Errorf("$.body.roles: got %+v", roles)
-	}
-
-	email := a.Body["$.body.email"]
-	if !email.IsOperator || email.Operator != "matches" || email.Operand != "^[^@]+@[^@]+$" {
-		t.Errorf("$.body.email: got %+v", email)
-	}
-
-	token := a.Body["$.body.token"]
-	if !token.IsOperator || token.Operator != "exists" || token.Operand != "true" {
-		t.Errorf("$.body.token: got %+v", token)
-	}
-
-	status := a.Body["$.body.status"]
-	wantList := []any{"pending", "active"}
-	if !status.IsOperator || status.Operator != "in" || !reflect.DeepEqual(status.Operand, wantList) {
-		t.Errorf("$.body.status: got %+v, want operand %v", status, wantList)
-	}
-
-	header := a.Headers["X-Request-Id"]
-	if !header.IsOperator || header.Operator != "equals" || header.Operand != "abc123" {
-		t.Errorf("header X-Request-Id: got %+v", header)
+	for _, c := range cases {
+		expectOperator(t, c.label, c.got, c.operator, c.operand)
 	}
 }
 

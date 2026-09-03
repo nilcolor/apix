@@ -21,8 +21,10 @@ func Reserved(name string) bool {
 
 // ReservedNames lists every reserved name, for error messages.
 func ReservedNames() string {
-	names := []string{"request", "builtin"}
-	for k := range funcs() {
+	f := funcs()
+	names := make([]string, 0, len(f)+2)
+	names = append(names, "request", "builtin")
+	for k := range f {
 		names = append(names, k)
 	}
 	sort.Strings(names)

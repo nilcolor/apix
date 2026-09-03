@@ -144,13 +144,12 @@ func interpolateBool(v any, store *vars.Store) (any, error) {
 		return nil, err
 	}
 	str := resolved.(string)
-	b, err := strconv.ParseBool(strings.TrimSpace(str))
-	if err != nil {
-		// Not a recognized boolean literal — let applyOperator's type assertion
-		// report the mismatch clearly instead of failing silently here.
-		return str, nil
+	if b, parseErr := strconv.ParseBool(strings.TrimSpace(str)); parseErr == nil {
+		return b, nil
 	}
-	return b, nil
+	// Not a recognized boolean literal — let applyOperator's type assertion
+	// report the mismatch clearly instead of failing silently here.
+	return str, nil
 }
 
 // interpolateList interpolates each string element of a []any operand for the "in"

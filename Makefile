@@ -3,7 +3,11 @@ HASH      := $(shell git rev-parse --short=7 HEAD 2>/dev/null || echo "dev")
 TIMESTAMP := $(shell date -u +'%Y%m%d_%H%M%S')
 REVISION  := $(BRANCH)-$(HASH)-$(TIMESTAMP)
 
-.PHONY: help build test race vet lint fmt all
+# CI reads the same file, so a local `make lint` runs the exact linter CI runs.
+GOLANGCI_VERSION := $(shell cat .golangci-version)
+GOLANGCI         := $(shell go env GOPATH)/bin/golangci-lint
+
+.PHONY: help build test race vet lint lint-tools fmt all
 .DEFAULT_GOAL: help
 
 help: ## Show available targets
@@ -21,8 +25,14 @@ race: ## Run tests with race detector
 vet: ## Run go vet
 	go vet ./...
 
-lint: ## Run golangci-lint
-	golangci-lint run
+lint: lint-tools ## Run golangci-lint (pinned to .golangci-version, same as CI)
+	$(GOLANGCI) run
+
+lint-tools: ## Install the pinned golangci-lint if missing or the wrong version
+	@if ! [ -x "$(GOLANGCI)" ] || ! $(GOLANGCI) --version 2>/dev/null | grep -q "$(patsubst v%,%,$(GOLANGCI_VERSION))"; then \
+		echo "installing golangci-lint $(GOLANGCI_VERSION)"; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION); \
+	fi
 
 fmt: ## Format source with gofmt
 	gofmt -w .
