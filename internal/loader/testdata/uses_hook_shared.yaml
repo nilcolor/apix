@@ -1,0 +1,7 @@
+include:
+  - ./hook_shared.yaml
+
+steps:
+  - name: signed
+    method: POST
+    path: /orders

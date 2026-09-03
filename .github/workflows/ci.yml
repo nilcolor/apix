@@ -31,7 +31,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
+      - id: golangci
+        run: echo "version=$(cat .golangci-version)" >> "$GITHUB_OUTPUT"
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          version: ${{ steps.golangci.outputs.version }}
           install-mode: goinstall

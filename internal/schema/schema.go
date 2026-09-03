@@ -23,6 +23,7 @@ type Config struct {
 	TLSVerify       *bool             `yaml:"tls_verify"`
 	Headers         map[string]string `yaml:"headers"`
 	UseCookieJar    bool              `yaml:"use_cookie_jar"`
+	BeforeSend      *Hook             `yaml:"before_send"`
 }
 
 // Step represents a single HTTP request.
@@ -43,6 +44,7 @@ type Step struct {
 	Ask            []AskItem         `yaml:"ask"`
 	Print          string            `yaml:"print"`
 	Assert         *Assert           `yaml:"assert"`
+	BeforeSend     *Hook             `yaml:"before_send"`
 	OnError        string            `yaml:"on_error"`
 	Retry          *Retry            `yaml:"retry"`
 

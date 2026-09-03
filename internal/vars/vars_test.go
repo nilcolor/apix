@@ -249,3 +249,81 @@ func TestBuiltinNotOverridableByStore(t *testing.T) {
 		t.Errorf("unexpected uuid value: %q", out)
 	}
 }
+
+// A sleep separates the two reads so that an unfrozen clock is guaranteed to
+// advance between them — without it the test would pass whether or not the
+// built-in is pinned.
+func TestFrozenTimeBuiltinsAgreeWithinAttempt(t *testing.T) {
+	for _, name := range []string{"$timestamp_ms", "$iso_date"} {
+		s := store()
+		s.FreezeBuiltins()
+
+		a, err := Interpolate("{{ "+name+" }}", s)
+		if err != nil {
+			t.Fatalf("Interpolate %s: %v", name, err)
+		}
+
+		time.Sleep(3 * time.Millisecond)
+
+		b, err := Interpolate("{{ "+name+" }}", s)
+		if err != nil {
+			t.Fatalf("Interpolate %s: %v", name, err)
+		}
+		if a != b {
+			t.Errorf("%s should be pinned within an attempt: %q vs %q", name, a, b)
+		}
+	}
+}
+
+func TestUnfrozenTimeBuiltinAdvances(t *testing.T) {
+	s := store()
+
+	a, _ := Interpolate("{{ $timestamp_ms }}", s)
+	time.Sleep(3 * time.Millisecond)
+	b, _ := Interpolate("{{ $timestamp_ms }}", s)
+
+	if a == b {
+		t.Errorf("without FreezeBuiltins the clock must advance, got %q twice", a)
+	}
+}
+
+func TestFrozenTimeBuiltinsDifferAcrossAttempts(t *testing.T) {
+	s := store()
+
+	s.FreezeBuiltins()
+	first, _ := Interpolate("{{ $timestamp_ms }}", s)
+
+	time.Sleep(2 * time.Millisecond)
+
+	s.FreezeBuiltins()
+	second, _ := Interpolate("{{ $timestamp_ms }}", s)
+
+	if first == second {
+		t.Errorf("re-freezing should advance the clock, got %q twice", first)
+	}
+}
+
+func TestUUIDStaysFreshWhenTimeIsFrozen(t *testing.T) {
+	s := store()
+	s.FreezeBuiltins()
+
+	a, _ := Interpolate("{{ $uuid }}", s)
+	b, _ := Interpolate("{{ $uuid }}", s)
+	if a == b {
+		t.Errorf("$uuid must stay fresh per call, got %q twice", a)
+	}
+}
+
+func TestTimestampMillisBuiltin(t *testing.T) {
+	out, err := Interpolate("{{ $timestamp_ms }}", store())
+	if err != nil {
+		t.Fatalf("Interpolate: %v", err)
+	}
+	ms, err := strconv.ParseInt(out, 10, 64)
+	if err != nil {
+		t.Fatalf("$timestamp_ms not an integer: %q", out)
+	}
+	if delta := time.Since(time.UnixMilli(ms)); delta < 0 || delta > time.Minute {
+		t.Errorf("$timestamp_ms not close to now: %q (delta %v)", out, delta)
+	}
+}

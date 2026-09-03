@@ -79,16 +79,98 @@ are masked to `***` in request snapshots at capture time inside `runner`. This a
 request headers and JSON body keys. The masking happens before the snapshot is stored in
 `Response.Request`, so verbose output and JSON output never expose raw secrets. The same
 heuristic (`runner.IsSensitive`) also masks matching variable names in the `Asked` map reported
-for `ask:` steps.
+for `ask:` steps, and in `Extracted` and hook variables.
+
+Separately, the *values* of sensitive-named variables are scrubbed at the **output boundary** — every
+formatter writes through a redacting writer, so verbose request/response dumps and silent mode's
+`print:` pass-through are covered too. Scrubbing chosen fields instead left each new field
+unprotected by default. Values under 6 characters are skipped so a short value cannot blank unrelated
+output, and longer values are replaced first so the result does not depend on map order.
+
+This is output hygiene, not a security control: it protects the terminal of whoever supplied the
+secret. A value that is re-encoded rather than embedded is not caught.
 
 ## Variable interpolation
 
-Syntax: `{{ varname }}` (whitespace-tolerant). Lookup order: built-ins → store. Built-ins
-(`$uuid`, `$timestamp`, `$iso_date`, `$random_int`) are generated fresh on every interpolation
-call and cannot be shadowed by user variables.
+Syntax: `{{ varname }}` (whitespace-tolerant). Lookup order: built-ins → store. Built-ins cannot be
+shadowed by user variables.
+
+`$uuid` and `$random_int` are generated fresh on every interpolation call. The time-derived built-ins
+(`$timestamp`, `$timestamp_ms`, `$iso_date`) are pinned once per request attempt, so every token in
+the same request resolves to the same instant — a signature computed over a body containing
+`{{ $timestamp }}` matches the `{{ $timestamp }}` sent in a header.
 
 **Note:** assertion values/operands in `assert:` blocks ARE interpolated (both YAML forms below),
 so `{{ }}` can reference any variable in the store, including one extracted by an earlier step.
+
+## Request hooks
+
+`before_send:` computes variables just before a request is sent. It exists for APIs that
+require a signature over the rendered body, and it is valid on a step or under `config:` —
+a step-level hook replaces the config one wholesale rather than merging per variable.
+
+```yaml
+config:
+  before_send:
+    ts: "builtin.timestamp"
+    canonical: "request.method + request.path + request.body + ts"
+    sig: "hex(hmac_sha256(canonical, api_secret))"
+  headers:
+    X-Timestamp: "{{ ts }}"
+    X-Signature: "{{ sig }}"
+```
+
+Values are **expressions**, not `{{ }}` templates — variables are referenced by bare name.
+`{{` inside a hook expression is a load-time error. Expressions evaluate in document order,
+each result visible to the next, and are committed to the store only if all of them succeed.
+
+### Render order
+
+```
+URL/path → query → body → before_send → headers → send
+```
+
+Headers are the only fields that can reference hook results. URL, path, query, body, `form`,
+`multipart` and `body_file` all render first and are what the hook signs over.
+
+### Hook environment
+
+| Name | |
+|---|---|
+| `request.method` `.url` `.path` `.query` `.body` | strings |
+| every store variable, by bare name | string |
+| `builtin.timestamp` `.timestamp_ms` `.iso_date` | frozen per attempt, identical to `{{ $timestamp }}` |
+
+`request.headers` is absent — headers render after the hook. Headers Go's client adds at send
+time (`Host`, `Content-Length`, `User-Agent`, `Accept-Encoding`) are not signable. `$uuid` and
+`$random_int` are absent because they are not frozen and could not be matched to a `{{ $uuid }}`
+elsewhere in the same request.
+
+### Hook functions
+
+`expr` supplies `upper lower trim replace split join keys sort map filter hasPrefix hasSuffix
+indexOf len string int`. apix adds only crypto and encoding:
+
+```
+hmac_sha256(data, key) -> bytes     sha256(data) -> bytes
+hex(b) -> string    base64(b) -> string    json(v) -> string
+```
+
+Digest functions return bytes and must be wrapped in an encoder — a hook result must be a string,
+and raw digest bytes in a header value are rejected rather than stringified. `hmac_sha256`'s key
+accepts a string or bytes, so derivation chains compose.
+
+Hook variable names, and store variable names, may not collide with `request`, `builtin`, or a
+function name; both are rejected rather than silently shadowed.
+
+Hook results are strings. Numbers are formatted without an exponent — `expr` yields a float from
+any division, and scientific notation in a header value is a wire bug.
+
+Hook variables are committed to the store and persist past their step, the same way extracted
+values do. A later step with no hook still resolves `{{ sig }}` to the previous step's value rather
+than erroring.
+
+Hooks are not evaluated under `--dry-run`: no body is built, so any signature shown would be wrong.
 
 ## Assert body path format
 
@@ -147,5 +229,11 @@ There's no support for comparing two bare values with no response lookup (e.g. `
 
 - `validate` command
 - `inspect` command
-- Retry execution (`retry:` block is parsed and warned about, not executed)
+- Retry execution (`retry:` block is parsed and warned about, not executed). When it lands,
+  `before_send` must re-run per attempt **and** the time built-ins must be re-frozen with it,
+  or a retried request signs a stale timestamp.
 - `condition:` on steps
+- `after_receive` hook and a `$.var.<name>.<path>` source for extract/assert — needed only when a
+  response must be decoded before assertions see it
+- Query-parameter signing: `schema.Step.Query` is `map[string]string`, so repeated parameters
+  cannot be expressed; that is the expensive part of the change

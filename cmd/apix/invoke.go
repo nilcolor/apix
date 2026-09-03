@@ -94,21 +94,22 @@ func invokeCmd(r *InvokeCommand, stdin io.Reader, stdout, stderr io.Writer) int 
 	// In all non-JSON modes, print: values go to stdout so they can be piped independently.
 	switch r.Output {
 	case "json":
-		if err := output.JSON(results, summary, stdout); err != nil {
+		if err := output.JSON(results, summary, store.All(), stdout); err != nil {
 			fmt.Fprintf(stderr, "error: write JSON output: %v\n", err)
 			return 2
 		}
 	case "silent":
+		out := output.RedactWriter(results, store.All(), stdout)
 		for i := range results {
 			if results[i].Printed != "" {
-				fmt.Fprintln(stdout, results[i].Printed)
+				fmt.Fprintln(out, results[i].Printed)
 			}
 		}
 	default: // "pretty"
 		if r.Verbose {
-			output.PrettyVerbose(results, summary, stderr, stdout)
+			output.PrettyVerbose(results, summary, store.All(), stderr, stdout)
 		} else {
-			output.Pretty(results, summary, stderr, stdout)
+			output.Pretty(results, summary, store.All(), stderr, stdout)
 		}
 	}
 

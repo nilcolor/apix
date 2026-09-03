@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nilcolor/apix/internal/hooks"
 	"github.com/nilcolor/apix/internal/schema"
 	"github.com/nilcolor/apix/internal/vars"
 )
@@ -89,40 +90,38 @@ func effectiveFollowRedirects(step *schema.Step, cfg *schema.Config) bool {
 
 // Execute performs the HTTP request described by step, interpolating all fields
 // from the variable store and applying config defaults. jar may be nil.
-func Execute(step *schema.Step, cfg *schema.Config, store *vars.Store, jar http.CookieJar) (*Response, error) {
+// Variables produced by the step's before_send hook are returned alongside the response.
+func Execute(step *schema.Step, cfg *schema.Config, store *vars.Store, jar http.CookieJar) (*Response, map[string]string, error) {
 	r := New(cfg, effectiveFollowRedirects(step, cfg), jar)
 	return r.execute(step, cfg, store)
 }
 
-func (r *Runner) execute(step *schema.Step, cfg *schema.Config, store *vars.Store) (*Response, error) {
+// effectiveHook resolves the before_send hook with step > config.
+// A step-level hook replaces the config one wholesale.
+func effectiveHook(step *schema.Step, cfg *schema.Config) *schema.Hook {
+	if step.BeforeSend != nil {
+		return step.BeforeSend
+	}
+	return cfg.BeforeSend
+}
+
+func (r *Runner) execute(step *schema.Step, cfg *schema.Config, store *vars.Store) (*Response, map[string]string, error) {
 	// --- Interpolate scalar fields ---
 	rawURL, err := resolveURL(step, cfg, store)
 	if err != nil {
-		return nil, err
-	}
-
-	headers, err := interpolateMap(step.Headers, store)
-	if err != nil {
-		return nil, fmt.Errorf("runner: headers: %w", err)
-	}
-
-	// Merge config default headers (step headers win).
-	for k, v := range cfg.Headers {
-		if _, ok := headers[k]; !ok {
-			headers[k] = v
-		}
+		return nil, nil, err
 	}
 
 	query, err := interpolateMap(step.Query, store)
 	if err != nil {
-		return nil, fmt.Errorf("runner: query: %w", err)
+		return nil, nil, fmt.Errorf("runner: query: %w", err)
 	}
 
 	// Append query params to URL.
 	if len(query) > 0 {
 		u, err := url.Parse(rawURL)
 		if err != nil {
-			return nil, fmt.Errorf("runner: parse URL %q: %w", rawURL, err)
+			return nil, nil, fmt.Errorf("runner: parse URL %q: %w", rawURL, err)
 		}
 		q := u.Query()
 		for k, v := range query {
@@ -135,7 +134,7 @@ func (r *Runner) execute(step *schema.Step, cfg *schema.Config, store *vars.Stor
 	// --- Build body ---
 	bodyBytes, contentType, err := buildBody(step, store)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// --- Build HTTP request ---
@@ -144,9 +143,45 @@ func (r *Runner) execute(step *schema.Step, cfg *schema.Config, store *vars.Stor
 		method = http.MethodGet
 	}
 
+	// Headers render after the hook so they can reference its results; every other
+	// field is already resolved above and is what the hook signs over.
+	var hookVars map[string]string
+	if h := effectiveHook(step, cfg); h != nil {
+		parsed, perr := url.Parse(rawURL)
+		if perr != nil {
+			return nil, nil, fmt.Errorf("runner: parse URL %q: %w", rawURL, perr)
+		}
+		hookVars, err = hooks.Run(h, hooks.Env{
+			Request: hooks.Request{
+				Method: method,
+				URL:    rawURL,
+				Path:   parsed.EscapedPath(),
+				Query:  parsed.RawQuery,
+				Body:   string(bodyBytes),
+			},
+			Store: store,
+		}, store)
+		if err != nil {
+			return nil, nil, fmt.Errorf("runner: %w", err)
+		}
+	}
+
+	merged := make(map[string]string, len(cfg.Headers)+len(step.Headers))
+	for k, v := range cfg.Headers {
+		merged[k] = v
+	}
+	for k, v := range step.Headers {
+		merged[k] = v
+	}
+
+	headers, err := interpolateMap(merged, store)
+	if err != nil {
+		return nil, nil, fmt.Errorf("runner: headers: %w", err)
+	}
+
 	req, err := http.NewRequest(method, rawURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("runner: build request: %w", err)
+		return nil, nil, fmt.Errorf("runner: build request: %w", err)
 	}
 
 	for k, v := range headers {
@@ -169,13 +204,13 @@ func (r *Runner) execute(step *schema.Step, cfg *schema.Config, store *vars.Stor
 	resp, err := r.client.Do(req)
 	duration := time.Since(start)
 	if err != nil {
-		return nil, fmt.Errorf("runner: %w", err)
+		return nil, nil, fmt.Errorf("runner: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("runner: read response body: %w", err)
+		return nil, nil, fmt.Errorf("runner: read response body: %w", err)
 	}
 
 	return &Response{
@@ -184,7 +219,7 @@ func (r *Runner) execute(step *schema.Step, cfg *schema.Config, store *vars.Stor
 		Body:     respBody,
 		Request:  snap,
 		Duration: duration,
-	}, nil
+	}, hookVars, nil
 }
 
 // resolveURL builds the final request URL by interpolating step.URL or cfg.BaseURL+step.Path.

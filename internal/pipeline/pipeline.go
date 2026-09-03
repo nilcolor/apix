@@ -65,6 +65,8 @@ func Run(steps []schema.Step, cfg *schema.Config, store *vars.Store, opts Option
 			fmt.Fprintf(stderr, "warning: step %q has retry: set — retry execution is not yet supported\n", step.Name)
 		}
 
+		store.FreezeBuiltins()
+
 		var result output.StepResult
 		if opts.DryRun {
 			result = dryRunStep(step, cfg, store)
@@ -171,12 +173,13 @@ func stepFailed(r output.StepResult) bool {
 // executeStep performs an HTTP request, extracts values, and evaluates assertions.
 // Errors (network, extraction) are captured in StepResult.Error rather than returned.
 func executeStep(step schema.Step, cfg *schema.Config, store *vars.Store, jar http.CookieJar) output.StepResult {
-	resp, err := runner.Execute(&step, cfg, store, jar)
+	resp, hookVars, err := runner.Execute(&step, cfg, store, jar)
 	if err != nil {
 		return output.StepResult{
-			Name:   step.Name,
-			Method: methodOrDefault(step.Method),
-			Error:  err.Error(),
+			Name:     step.Name,
+			Method:   methodOrDefault(step.Method),
+			HookVars: hookVars,
+			Error:    err.Error(),
 		}
 	}
 
@@ -200,6 +203,7 @@ func executeStep(step schema.Step, cfg *schema.Config, store *vars.Store, jar ht
 		DurationMs: resp.Duration.Milliseconds(),
 		Assertions: assertions,
 		Extracted:  extracted,
+		HookVars:   hookVars,
 		Request:    &snap,
 		Response:   resp,
 		Error:      errStr,

@@ -1,0 +1,92 @@
+# Request signing example — before_send computes an HMAC over the outgoing request.
+#
+# httpbin echoes back the headers and body it received, so each step asserts that
+# what the server got matches what the hook produced. That catches a header that
+# never made it or arrived altered — it does not, on its own, prove the signature
+# covers the right bytes, since both sides of the comparison come from the same
+# hook. To check that, print the canonical string and hash it yourself:
+#
+#   apix invoke scrolls/signed_request.yaml --step signed_post --output json \
+#     | jq -r '.steps[0].hook_vars.canonical' | tr -d '\n' \
+#     | openssl dgst -sha256 -hmac 'demo-signing-key'
+#
+# which reproduces the sig in the same output.
+#
+# Run:
+#   apix invoke scrolls/signed_request.yaml
+#   apix invoke scrolls/signed_request.yaml --verbose        # see the signed request
+#   apix invoke scrolls/signed_request.yaml --output json    # hook results under "hook_vars"
+#   apix invoke scrolls/signed_request.yaml --var api_secret=other-key
+#
+# Note: hooks are not evaluated under --dry-run — no body is built, so any
+# signature it printed would be wrong.
+
+config:
+  base_url: https://httpbin.org
+  timeout: 10s
+
+  # Defined once here, so every step below is signed without repeating the block.
+  before_send:
+    ts: "builtin.timestamp"
+    canonical: "request.method + request.path + request.body + ts"
+    sig: "hex(hmac_sha256(canonical, api_secret))"
+
+  # Headers are the only fields that may reference a hook result — they render
+  # after the hook. path, query and body render before it, and are what it signs.
+  headers:
+    X-Timestamp: "{{ ts }}"
+    X-Signature: "{{ sig }}"
+
+variables:
+  api_secret: demo-signing-key
+
+steps:
+  # The config hook applies here with nothing step-specific declared.
+  - name: signed_post
+    method: POST
+    path: /post
+    body:
+      amount: 100
+      currency: USD
+    assert:
+      - "status == 200"
+      - "$.body.headers['X-Signature'] == {{ sig }}"
+      - "$.body.headers['X-Timestamp'] == {{ ts }}"
+      # The signature is over the body the server received, not a re-render of it.
+      - "$.body.json.amount == 100"
+
+  # A different body produces a different signature, with no scroll changes.
+  - name: signed_post_other_body
+    method: POST
+    path: /post
+    body:
+      amount: 250
+      currency: EUR
+    assert:
+      - "status == 200"
+      - "$.body.headers['X-Signature'] == {{ sig }}"
+
+  # Time built-ins are fixed per request, so a timestamp placed in the body and one
+  # placed in a header always agree. Without that, a signature computed over the body
+  # would fail whenever the two renders landed either side of a second.
+  - name: body_and_header_clock_agree
+    method: POST
+    path: /post
+    body:
+      sent_at: "{{ $timestamp }}"
+    assert:
+      - "status == 200"
+      - "$.body.json.sent_at == {{ $timestamp }}"
+      - "$.body.headers['X-Timestamp'] == {{ $timestamp }}"
+
+  # A step-level hook replaces the config one outright rather than merging into it,
+  # so this request is signed over the path alone.
+  - name: step_hook_overrides_config
+    method: GET
+    path: /get
+    before_send:
+      ts: "builtin.timestamp"
+      sig: "hex(hmac_sha256(request.path, api_secret))"
+    assert:
+      - "status == 200"
+      - "$.body.headers['X-Signature'] == {{ sig }}"

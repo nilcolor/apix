@@ -202,6 +202,78 @@ If `print` contains `{{`, it's treated as a template and interpolated; otherwise
 as a source path, evaluated the same way as `extract`, and pretty-printed (JSON objects/arrays
 get indentation).
 
+### `before_send` — computing a request signature
+
+Some APIs require a signature over the request itself. `before_send:` computes variables just
+before the request goes out, and headers can reference them.
+
+```yaml
+config:
+  base_url: https://api.example.com
+  before_send:
+    ts: "builtin.timestamp"
+    canonical: "request.method + request.path + request.body + ts"
+    sig: "hex(hmac_sha256(canonical, api_secret))"
+  headers:
+    X-Timestamp: "{{ ts }}"
+    X-Signature: "{{ sig }}"
+
+variables:
+  api_secret: $API_SECRET
+
+steps:
+  - name: create order
+    method: POST
+    path: /orders
+    body:
+      amount: 100
+```
+
+Valid on a step or under `config:`. A step-level hook replaces the config one entirely rather
+than merging variable by variable.
+
+**Values are expressions, not `{{ }}` templates.** Variables are referenced by bare name, and a
+`{{` inside a hook expression is an error. Expressions run in the order written, each result
+visible to the next, and are stored only if all of them succeed.
+
+**What the hook can and cannot see.** Fields render in this order:
+
+```
+URL/path → query → body → before_send → headers → send
+```
+
+So **headers are the only fields that can reference a hook result**. `path`, `query`, `body`,
+`form`, `multipart` and `body_file` are all resolved before the hook runs — they are what the
+hook signs over, and referencing `{{ sig }}` from any of them fails with an unknown variable.
+
+Available inside an expression:
+
+| Name | |
+|---|---|
+| `request.method` `.url` `.path` `.query` `.body` | the outgoing request, exactly as it goes on the wire |
+| any variable in scope, by bare name | e.g. `api_secret` |
+| `builtin.timestamp` `.timestamp_ms` `.iso_date` | same instant as `{{ $timestamp }}` in the same request |
+
+`request.headers` is not available — headers have not been rendered yet. Headers added by the
+HTTP client (`Host`, `Content-Length`, `User-Agent`, `Accept-Encoding`) cannot be signed.
+
+Beyond the usual expression operators, these functions are available:
+
+| Function | |
+|---|---|
+| `hmac_sha256(data, key)` `sha256(data)` | return raw bytes — wrap in an encoder |
+| `hex(b)` `base64(b)` | encode bytes to a string |
+| `json(v)` | compact JSON encoding |
+
+Plus the string and list helpers `upper lower trim replace split join keys sort map filter
+hasPrefix hasSuffix indexOf len string int`.
+
+A hook result must be a string, so raw digest bytes are rejected — write `hex(hmac_sha256(...))`,
+not `hmac_sha256(...)`. Division yields a float: `int(builtin.timestamp_ms) / 1000` gives
+`1788437721.156`, so wrap the whole expression in `int(...)` if you want whole seconds.
+
+Hooks do not run under `--dry-run`, since no body is built and any signature shown would be wrong.
+
 ### `assert` — verifying responses
 
 `assert:` accepts two forms.
@@ -257,14 +329,19 @@ value, without either side being a hard-coded literal.
 
 ### Built-in variables
 
-Available in any `{{ }}` interpolation without declaration, generated fresh on every use:
+Available in any `{{ }}` interpolation without declaration:
 
-| Variable | Value |
-|---|---|
-| `$uuid` | Random UUID v4 |
-| `$timestamp` | Unix timestamp (seconds) |
-| `$iso_date` | Current datetime in ISO 8601 |
-| `$random_int` | Random integer |
+| Variable | Value | |
+|---|---|---|
+| `$uuid` | Random UUID v4 | fresh on every use |
+| `$random_int` | Random integer | fresh on every use |
+| `$timestamp` | Unix timestamp (seconds) | fixed per request |
+| `$timestamp_ms` | Unix timestamp (milliseconds) | fixed per request |
+| `$iso_date` | Current datetime in ISO 8601 | fixed per request |
+
+The time values are fixed for the duration of a single request, so a body and a header that both
+use `{{ $timestamp }}` always agree — otherwise a signature computed over one would not match the
+other whenever the two renders happened to land either side of a second.
 
 ### Output modes
 
@@ -302,8 +379,17 @@ Available in any `{{ }}` interpolation without declaration, generated fresh on e
 
 Any header or JSON body field whose name contains `password`, `secret`, `token`, or
 `authorization` (case-insensitive) is masked to `***` in verbose and JSON output. The same
-heuristic masks matching variable names reported by `ask`. Masking happens before the
-snapshot is captured, so raw secrets never reach the output layer.
+heuristic masks matching variable names reported by `ask`, `extract`, and `before_send`.
+
+The *values* of those variables are also replaced wherever else they appear, which catches a
+signing hook that builds a canonical string containing the secret under a harmless-looking name.
+This applies to every output mode, including verbose request/response dumps and `print:` output
+in silent mode.
+
+This is output hygiene rather than a security boundary — it protects the terminal and any logs
+you paste from, not against anything the scroll author chose to do. Values shorter than six
+characters are left alone so a short value cannot blank out unrelated output, and a value that is
+re-encoded rather than embedded is not caught.
 
 ### Exit codes
 
@@ -316,7 +402,9 @@ snapshot is captured, so raw secrets never reach the output layer.
 ### Not yet implemented
 
 `retry:` is parsed and warned about on stderr but not executed. `condition:` on steps is not
-supported. These are reserved for future work.
+supported. There is no `after_receive` hook, so a response cannot be decoded before `extract` and
+`assert` see it, and query parameters cannot be signed — only headers can reference hook output.
+These are reserved for future work.
 
 ## Examples
 

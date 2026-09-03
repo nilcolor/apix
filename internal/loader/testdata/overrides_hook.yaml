@@ -1,0 +1,11 @@
+include:
+  - ./hook_shared.yaml
+
+config:
+  before_send:
+    sig: "hex(hmac_sha256(request.path, api_secret))"
+
+steps:
+  - name: signed
+    method: POST
+    path: /orders
