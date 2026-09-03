@@ -11,9 +11,10 @@ extracts values from responses, and evaluates assertions.
 ```sh
 make build          # go build -o bin/apix ./cmd/apix
 make test           # go test ./...
+make race           # go test -race ./...
 make vet            # go vet ./...
 make fmt            # gofmt -w .
-make lint           # staticcheck ./...
+make lint           # golangci-lint run
 ```
 
 Or directly:
@@ -21,8 +22,16 @@ Or directly:
 ```sh
 go build ./cmd/apix/...
 go test ./...
-staticcheck ./...
 ```
+
+`make lint` runs **golangci-lint**, not `staticcheck`. staticcheck is only one of the
+linters `.golangci.yml` enables, so `staticcheck ./...` can pass while `make lint` fails.
+Gate on `make lint`.
+
+The linter version is pinned in `.golangci-version`, read by both the `Makefile` and
+`.github/workflows/ci.yml`. `make lint` installs that exact version when the local one is
+missing or mismatched, so a green `make lint` means a green CI lint. Change the linter
+version by editing that file only.
 
 ## Package layout
 
