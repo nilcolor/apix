@@ -406,11 +406,11 @@ steps:
 // TestAssertExpressionFormErrors covers malformed expression strings.
 func TestAssertExpressionFormErrors(t *testing.T) {
 	cases := []string{
-		"$.body.role",                    // no operator
-		"== 200",                         // missing source
-		"status ==",                      // missing operand
-		"$.body.x unknown_op 1",          // unrecognized operator
-		"unknown.source == 1",            // unrecognized source prefix
+		"$.body.role",                     // no operator
+		"== 200",                          // missing source
+		"status ==",                       // missing operand
+		"$.body.x unknown_op 1",           // unrecognized operator
+		"unknown.source == 1",             // unrecognized source prefix
 		"$.body.roles in pending, active", // in: missing brackets
 	}
 	for _, expr := range cases {

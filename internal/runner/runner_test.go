@@ -59,7 +59,7 @@ func TestJSONBody(t *testing.T) {
 			"password": "secret",
 		},
 	}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestFormBody(t *testing.T) {
 			"client_id":  "abc",
 		},
 	}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestQueryParams(t *testing.T) {
 		URL:    srv.URL + "/items",
 		Query:  map[string]string{"page": "2", "size": "10"},
 	}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestHeaderInterpolation(t *testing.T) {
 		URL:     srv.URL + "/me",
 		Headers: map[string]string{"Authorization": "Bearer {{ my_token }}"},
 	}
-	resp, err := Execute(step, emptyCfg(), store, nil)
+	resp, _, err := Execute(step, emptyCfg(), store, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestBaseURLAndPath(t *testing.T) {
 
 	cfg := &schema.Config{BaseURL: srv.URL}
 	step := &schema.Step{Method: "GET", Path: "/users"}
-	resp, err := Execute(step, cfg, vars.NewStore(), nil)
+	resp, _, err := Execute(step, cfg, vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestPathInterpolation(t *testing.T) {
 	store := storeWith("report_uuid", "abc-123")
 	cfg := &schema.Config{BaseURL: srv.URL}
 	step := &schema.Step{Method: "GET", Path: "/api/v3/reports/{{ report_uuid }}/report-details"}
-	resp, err := Execute(step, cfg, store, nil)
+	resp, _, err := Execute(step, cfg, store, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestURLOverridesBaseURL(t *testing.T) {
 
 	cfg := &schema.Config{BaseURL: "http://wrong.example.com"}
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/override"}
-	resp, err := Execute(step, cfg, vars.NewStore(), nil)
+	resp, _, err := Execute(step, cfg, vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestTimeout(t *testing.T) {
 	d.Duration = 50 * time.Millisecond
 	cfg := &schema.Config{Timeout: d}
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/slow"}
-	_, err := Execute(step, cfg, vars.NewStore(), nil)
+	_, _, err := Execute(step, cfg, vars.NewStore(), nil)
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -240,7 +240,7 @@ func TestNoFollowRedirectByDefault(t *testing.T) {
 	defer srv.Close()
 
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect"}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -256,7 +256,7 @@ func TestFollowRedirectViaConfig(t *testing.T) {
 	follow := true
 	cfg := &schema.Config{FollowRedirects: &follow}
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect"}
-	resp, err := Execute(step, cfg, vars.NewStore(), nil)
+	resp, _, err := Execute(step, cfg, vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestFollowRedirectViaStep(t *testing.T) {
 
 	follow := true
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect", FollowRedirect: &follow}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestStepFollowRedirectOverridesConfig(t *testing.T) {
 	cfg := &schema.Config{FollowRedirects: &cfgFollow}
 	stepNoFollow := false
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/redirect", FollowRedirect: &stepNoFollow}
-	resp, err := Execute(step, cfg, vars.NewStore(), nil)
+	resp, _, err := Execute(step, cfg, vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestTLSVerifyOff(t *testing.T) {
 	noVerify := false
 	cfg := &schema.Config{TLSVerify: &noVerify}
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/"}
-	resp, err := Execute(step, cfg, vars.NewStore(), nil)
+	resp, _, err := Execute(step, cfg, vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute (TLS verify off): %v", err)
 	}
@@ -355,7 +355,7 @@ func TestMultipartWithFile(t *testing.T) {
 			"description": "test upload",
 		},
 	}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -377,7 +377,7 @@ func TestMultipleBodyKindsError(t *testing.T) {
 		Body:    map[string]any{"x": 1},
 		BodyRaw: "raw",
 	}
-	_, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	_, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err == nil {
 		t.Fatal("expected error for multiple body kinds")
 	}
@@ -395,7 +395,7 @@ func TestSensitiveHeaderMasking(t *testing.T) {
 			"X-Normal":      "visible",
 		},
 	}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestSensitiveBodyMasking(t *testing.T) {
 			"token":    "tok123",
 		},
 	}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestBodyRaw(t *testing.T) {
 		URL:     srv.URL + "/raw",
 		BodyRaw: "plain text payload",
 	}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -466,7 +466,7 @@ func TestDurationCaptured(t *testing.T) {
 	defer srv.Close()
 
 	step := &schema.Step{Method: "GET", URL: srv.URL + "/"}
-	resp, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	resp, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -493,7 +493,7 @@ func TestBodyFile(t *testing.T) {
 		URL:      srv.URL + "/submit",
 		BodyFile: tmp.Name(),
 	}
-	resp, err := Execute(step, emptyCfg(), store, nil)
+	resp, _, err := Execute(step, emptyCfg(), store, nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestBodyFileContentType(t *testing.T) {
 	tmp.Close()
 
 	step := &schema.Step{Method: "POST", URL: srv.URL + "/", BodyFile: tmp.Name()}
-	_, err = Execute(step, emptyCfg(), vars.NewStore(), nil)
+	_, _, err = Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -539,7 +539,7 @@ func TestBodyFileMissing(t *testing.T) {
 		URL:      "http://localhost/",
 		BodyFile: "/nonexistent/path/payload.json",
 	}
-	_, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	_, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err == nil {
 		t.Fatal("expected error for missing body_file")
 	}
@@ -555,7 +555,7 @@ func TestBodyFileWithBodyError(t *testing.T) {
 		Body:     map[string]any{"x": 1},
 		BodyFile: "/some/file.json",
 	}
-	_, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	_, _, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
 	if err == nil {
 		t.Fatal("expected error for multiple body kinds")
 	}
@@ -578,16 +578,104 @@ func TestCookieJarPersistsAcrossRequests(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 
 	step1 := &schema.Step{Method: "GET", URL: srv.URL + "/set"}
-	if _, err := Execute(step1, emptyCfg(), vars.NewStore(), jar); err != nil {
+	if _, _, err := Execute(step1, emptyCfg(), vars.NewStore(), jar); err != nil {
 		t.Fatalf("step1: %v", err)
 	}
 
 	step2 := &schema.Step{Method: "GET", URL: srv.URL + "/check"}
-	if _, err := Execute(step2, emptyCfg(), vars.NewStore(), jar); err != nil {
+	if _, _, err := Execute(step2, emptyCfg(), vars.NewStore(), jar); err != nil {
 		t.Fatalf("step2: %v", err)
 	}
 
 	if !strings.Contains(cookiesSeen, "session=abc123") {
 		t.Errorf("cookie not forwarded to second request: %q", cookiesSeen)
+	}
+}
+
+func TestConfigHeaderInterpolation(t *testing.T) {
+	srv := echoServer(t)
+	defer srv.Close()
+
+	store := storeWith("my_token", "tok123")
+	cfg := &schema.Config{Headers: map[string]string{"Authorization": "Bearer {{ my_token }}"}}
+	step := &schema.Step{Method: "GET", URL: srv.URL + "/me"}
+
+	resp, _, err := Execute(step, cfg, store, nil)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var echo map[string]any
+	_ = json.Unmarshal(resp.Body, &echo)
+	hdrs := echo["headers"].(map[string]any)
+	authList := hdrs["Authorization"].([]any)
+	if len(authList) == 0 || authList[0] != "Bearer tok123" {
+		t.Errorf("config Authorization header: %v", authList)
+	}
+}
+
+func TestConfigHeaderUnknownVariableErrors(t *testing.T) {
+	srv := echoServer(t)
+	defer srv.Close()
+
+	cfg := &schema.Config{Headers: map[string]string{"X-Trace": "{{ nope }}"}}
+	step := &schema.Step{Method: "GET", URL: srv.URL + "/me"}
+
+	_, _, err := Execute(step, cfg, vars.NewStore(), nil)
+	if err == nil {
+		t.Fatal("expected error for unknown variable in config header")
+	}
+	if !strings.Contains(err.Error(), "nope") {
+		t.Errorf("error should name the unknown variable: %v", err)
+	}
+}
+
+func TestStepHeaderOverridesConfigHeader(t *testing.T) {
+	srv := echoServer(t)
+	defer srv.Close()
+
+	cfg := &schema.Config{Headers: map[string]string{"X-Env": "config"}}
+	step := &schema.Step{
+		Method:  "GET",
+		URL:     srv.URL + "/me",
+		Headers: map[string]string{"X-Env": "step"},
+	}
+
+	resp, _, err := Execute(step, cfg, vars.NewStore(), nil)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var echo map[string]any
+	_ = json.Unmarshal(resp.Body, &echo)
+	hdrs := echo["headers"].(map[string]any)
+	envList := hdrs["X-Env"].([]any)
+	if len(envList) == 0 || envList[0] != "step" {
+		t.Errorf("step header should win over config: %v", envList)
+	}
+}
+
+// The hook must see the path exactly as it goes on the wire: a canonical string
+// built from a decoded path signs something the server never received.
+func TestHookPathMatchesWire(t *testing.T) {
+	var wirePath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wirePath = r.URL.EscapedPath()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	step := &schema.Step{
+		Method: "GET",
+		URL:    srv.URL + "/v1/a%2Fb/item",
+		BeforeSend: &schema.Hook{Vars: []schema.HookVar{
+			{Name: "seen_path", Expr: "request.path"},
+		}},
+	}
+
+	_, hookVars, err := Execute(step, emptyCfg(), vars.NewStore(), nil)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if hookVars["seen_path"] != wirePath {
+		t.Errorf("hook saw %q but the wire carried %q", hookVars["seen_path"], wirePath)
 	}
 }

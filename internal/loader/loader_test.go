@@ -229,3 +229,31 @@ func TestMissingFile(t *testing.T) {
 		t.Fatal("expected error for missing file")
 	}
 }
+
+func TestConfigHookInheritedFromInclude(t *testing.T) {
+	f, err := Load("testdata/uses_hook_shared.yaml")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if f.Config.BeforeSend == nil {
+		t.Fatal("config before_send not inherited from include")
+	}
+	got := f.Config.BeforeSend.Vars
+	if len(got) != 2 || got[0].Name != "ts" || got[1].Name != "sig" {
+		t.Errorf("hook vars not preserved in order: %+v", got)
+	}
+}
+
+func TestConfigHookReplacedWholesale(t *testing.T) {
+	f, err := Load("testdata/overrides_hook.yaml")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if f.Config.BeforeSend == nil {
+		t.Fatal("config before_send missing")
+	}
+	got := f.Config.BeforeSend.Vars
+	if len(got) != 1 || got[0].Name != "sig" {
+		t.Errorf("current-file hook should replace the included one wholesale, got %+v", got)
+	}
+}

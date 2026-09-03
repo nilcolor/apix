@@ -123,6 +123,9 @@ func mergeConfig(src, dst schema.Config) schema.Config {
 	if dst.TLSVerify != nil {
 		result.TLSVerify = dst.TLSVerify
 	}
+	if dst.BeforeSend != nil {
+		result.BeforeSend = dst.BeforeSend
+	}
 
 	// Merge headers: start from src, let dst keys win.
 	if len(src.Headers) > 0 || len(dst.Headers) > 0 {

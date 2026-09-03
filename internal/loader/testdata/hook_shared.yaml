@@ -1,0 +1,5 @@
+config:
+  base_url: https://shared.example.com
+  before_send:
+    ts: "builtin.timestamp"
+    sig: "hex(hmac_sha256(request.body + ts, api_secret))"

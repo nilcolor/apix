@@ -23,6 +23,7 @@ type StepResult struct {
 	DurationMs int64
 	Assertions []assert.Result
 	Extracted  map[string]string
+	HookVars   map[string]string
 	Asked      map[string]string
 	Printed    string
 	Request    *runner.RequestSnapshot
@@ -44,13 +45,16 @@ var (
 	colorFail    = color.New(color.FgRed)
 	colorExtract = color.New(color.FgYellow)
 	colorAsk     = color.New(color.FgCyan)
+	colorHook    = color.New(color.FgMagenta)
 	colorMeta    = color.New(color.FgHiBlack)
 	colorHeader  = color.New(color.FgWhite, color.Bold)
 )
 
 // Pretty writes human-readable output for each step and a summary line to w.
 // printOut receives print: values (one per step, after the step block); pass nil to suppress.
-func Pretty(results []StepResult, summary Summary, w, printOut io.Writer) {
+func Pretty(results []StepResult, summary Summary, secrets map[string]string, w, printOut io.Writer) {
+	red := newRedactor(results, secrets)
+	w, printOut = red.writer(w), red.writer(printOut)
 	for i := range results {
 		if i > 0 {
 			fmt.Fprintln(w)
@@ -63,8 +67,11 @@ func Pretty(results []StepResult, summary Summary, w, printOut io.Writer) {
 		if results[i].Error != "" {
 			colorFail.Fprintf(w, "  ✗ error: %s\n", results[i].Error)
 		}
-		for k, v := range results[i].Extracted {
+		for k, v := range red.reportMap(results[i].Extracted) {
 			colorExtract.Fprintf(w, "  → %-10s = %s\n", k, v)
+		}
+		for k, v := range red.reportMap(results[i].HookVars) {
+			colorHook.Fprintf(w, "  ƒ %-10s = %s\n", k, v)
 		}
 		for k, v := range results[i].Asked {
 			colorAsk.Fprintf(w, "  ? %-10s = %s\n", k, v)
@@ -78,7 +85,9 @@ func Pretty(results []StepResult, summary Summary, w, printOut io.Writer) {
 
 // PrettyVerbose writes Pretty output plus full request/response dumps per step.
 // printOut receives print: values (one per step, after the step block); pass nil to suppress.
-func PrettyVerbose(results []StepResult, summary Summary, w, printOut io.Writer) {
+func PrettyVerbose(results []StepResult, summary Summary, secrets map[string]string, w, printOut io.Writer) {
+	red := newRedactor(results, secrets)
+	w, printOut = red.writer(w), red.writer(printOut)
 	for i := range results {
 		if i > 0 {
 			fmt.Fprintln(w)
@@ -98,8 +107,11 @@ func PrettyVerbose(results []StepResult, summary Summary, w, printOut io.Writer)
 		if results[i].Error != "" {
 			colorFail.Fprintf(w, "  ✗ error: %s\n", results[i].Error)
 		}
-		for k, v := range results[i].Extracted {
+		for k, v := range red.reportMap(results[i].Extracted) {
 			colorExtract.Fprintf(w, "  → %-10s = %s\n", k, v)
+		}
+		for k, v := range red.reportMap(results[i].HookVars) {
+			colorHook.Fprintf(w, "  ƒ %-10s = %s\n", k, v)
 		}
 		for k, v := range results[i].Asked {
 			colorAsk.Fprintf(w, "  ? %-10s = %s\n", k, v)
@@ -112,7 +124,8 @@ func PrettyVerbose(results []StepResult, summary Summary, w, printOut io.Writer)
 }
 
 // JSON writes structured JSON output to w.
-func JSON(results []StepResult, summary Summary, w io.Writer) error {
+func JSON(results []StepResult, summary Summary, secrets map[string]string, w io.Writer) error {
+	red := newRedactor(results, secrets)
 	type assertionJSON struct {
 		Check    string `json:"check"`
 		Expected any    `json:"expected"`
@@ -127,6 +140,7 @@ func JSON(results []StepResult, summary Summary, w io.Writer) error {
 		DurationMs int64             `json:"duration_ms"`
 		Assertions []assertionJSON   `json:"assertions"`
 		Extracted  map[string]string `json:"extracted,omitempty"`
+		HookVars   map[string]string `json:"hook_vars,omitempty"`
 		Asked      map[string]string `json:"asked,omitempty"`
 		Printed    string            `json:"printed,omitempty"`
 		Error      string            `json:"error,omitempty"`
@@ -160,7 +174,8 @@ func JSON(results []StepResult, summary Summary, w io.Writer) error {
 			Status:     results[i].Status,
 			DurationMs: results[i].DurationMs,
 			Assertions: assertions,
-			Extracted:  results[i].Extracted,
+			Extracted:  red.reportMap(results[i].Extracted),
+			HookVars:   red.reportMap(results[i].HookVars),
 			Asked:      results[i].Asked,
 			Printed:    results[i].Printed,
 			Error:      results[i].Error,
@@ -172,7 +187,7 @@ func JSON(results []StepResult, summary Summary, w io.Writer) error {
 		Summary: summaryJSON(summary),
 	}
 
-	enc := json.NewEncoder(w)
+	enc := json.NewEncoder(red.writer(w))
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
 }

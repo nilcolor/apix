@@ -2,7 +2,11 @@ package pipeline
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -649,5 +653,202 @@ func TestRunAskEOFError(t *testing.T) {
 	}
 	if results[0].Error == "" {
 		t.Errorf("want step error on stdin EOF, got none")
+	}
+}
+
+// TestTimeBuiltinsAgreeWithinStep: the property signing depends on — a body and a
+// header referencing {{ $timestamp }} in the same step must resolve to one instant.
+// Deterministic proof that freezing works lives in vars; this covers the wiring.
+func TestTimeBuiltinsAgreeWithinStep(t *testing.T) {
+	var headerTS, bodyTS []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		headerTS = append(headerTS, r.Header.Get("X-Timestamp"))
+		bodyTS = append(bodyTS, body["ts"].(string))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	step := func(name string) schema.Step {
+		return schema.Step{
+			Name:    name,
+			Method:  "POST",
+			Path:    "/sign",
+			Origin:  "current",
+			Headers: map[string]string{"X-Timestamp": "{{ $timestamp_ms }}"},
+			Body:    map[string]any{"ts": "{{ $timestamp_ms }}"},
+		}
+	}
+
+	_, _, err := Run([]schema.Step{step("one"), step("two")}, newCfg(srv.URL), vars.NewStore(), Options{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if len(headerTS) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(headerTS))
+	}
+	for i := range headerTS {
+		if headerTS[i] != bodyTS[i] {
+			t.Errorf("step %d: header %q and body %q must match", i, headerTS[i], bodyTS[i])
+		}
+	}
+}
+
+// TestBeforeSendSignsRequest: the motivating case. The handler recomputes the HMAC
+// from what it received and compares, so a mismatch between what the hook signed
+// and what was sent fails the test rather than being asserted around.
+func TestBeforeSendSignsRequest(t *testing.T) {
+	const secret = "topsecret"
+	var verified, mismatch int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		ts := r.Header.Get("X-Timestamp")
+
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(r.Method + r.URL.Path + string(body) + ts))
+		want := hex.EncodeToString(mac.Sum(nil))
+
+		if hmac.Equal([]byte(want), []byte(r.Header.Get("X-Signature"))) {
+			atomic.AddInt32(&verified, 1)
+		} else {
+			atomic.AddInt32(&mismatch, 1)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	store := vars.NewStore()
+	store.Set("api_secret", secret)
+
+	steps := []schema.Step{{
+		Name:   "signed",
+		Method: "POST",
+		Path:   "/orders",
+		Origin: "current",
+		Body:   map[string]any{"amount": 100},
+		BeforeSend: &schema.Hook{Vars: []schema.HookVar{
+			{Name: "ts", Expr: "builtin.timestamp"},
+			{Name: "canonical", Expr: "request.method + request.path + request.body + ts"},
+			{Name: "sig", Expr: "hex(hmac_sha256(canonical, api_secret))"},
+		}},
+		Headers: map[string]string{
+			"X-Timestamp": "{{ ts }}",
+			"X-Signature": "{{ sig }}",
+		},
+	}}
+
+	results, _, err := Run(steps, newCfg(srv.URL), store, Options{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if results[0].Error != "" {
+		t.Fatalf("step error: %s", results[0].Error)
+	}
+	if atomic.LoadInt32(&verified) != 1 || atomic.LoadInt32(&mismatch) != 0 {
+		t.Errorf("signature not verified by server: verified=%d mismatch=%d",
+			atomic.LoadInt32(&verified), atomic.LoadInt32(&mismatch))
+	}
+	if len(results[0].HookVars["sig"]) != 64 {
+		t.Errorf("hook vars not reported on the result: %+v", results[0].HookVars)
+	}
+}
+
+// TestConfigBeforeSendAppliesToEveryStep: the hook lives in shared config, not per step.
+func TestConfigBeforeSendAppliesToEveryStep(t *testing.T) {
+	var signed int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.Header.Get("X-Signature")) == 64 {
+			atomic.AddInt32(&signed, 1)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	store := vars.NewStore()
+	store.Set("api_secret", "s3cr3t")
+
+	cfg := newCfg(srv.URL)
+	cfg.BeforeSend = &schema.Hook{Vars: []schema.HookVar{
+		{Name: "sig", Expr: "hex(hmac_sha256(request.method + request.path, api_secret))"},
+	}}
+	cfg.Headers = map[string]string{"X-Signature": "{{ sig }}"}
+
+	steps := []schema.Step{
+		currentStep("one", "GET", "/a"),
+		currentStep("two", "GET", "/b"),
+	}
+
+	if _, _, err := Run(steps, cfg, store, Options{}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if atomic.LoadInt32(&signed) != 2 {
+		t.Errorf("expected both steps signed, got %d", atomic.LoadInt32(&signed))
+	}
+}
+
+// TestHookErrorLeavesNoStaleVariable: a hook failing partway must not leave its
+// earlier results behind for the next step to sign with.
+func TestHookErrorLeavesNoStaleVariable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	store := vars.NewStore()
+
+	steps := []schema.Step{{
+		Name:    "broken",
+		Method:  "GET",
+		Path:    "/a",
+		Origin:  "current",
+		OnError: "continue",
+		BeforeSend: &schema.Hook{Vars: []schema.HookVar{
+			{Name: "ts", Expr: "builtin.timestamp"},
+			{Name: "sig", Expr: "no_such_function(ts)"},
+		}},
+	}}
+
+	results, _, err := Run(steps, newCfg(srv.URL), store, Options{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if results[0].Error == "" {
+		t.Fatal("expected the hook error on the step result")
+	}
+	if !strings.Contains(results[0].Error, "sig") {
+		t.Errorf("error should name the failing variable: %s", results[0].Error)
+	}
+	if _, ok := store.Get("ts"); ok {
+		t.Error("ts must not be committed when a later expression fails")
+	}
+}
+
+func TestDryRunDoesNotEvaluateHooks(t *testing.T) {
+	store := vars.NewStore()
+
+	steps := []schema.Step{{
+		Name:   "signed",
+		Method: "POST",
+		Path:   "/orders",
+		Origin: "current",
+		BeforeSend: &schema.Hook{Vars: []schema.HookVar{
+			{Name: "sig", Expr: "no_such_function(1)"},
+		}},
+	}}
+
+	results, _, err := Run(steps, newCfg("https://example.test"), store, Options{DryRun: true})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if results[0].Error != "" {
+		t.Errorf("dry-run must not evaluate hooks, got error: %s", results[0].Error)
+	}
+	if _, ok := store.Get("sig"); ok {
+		t.Error("dry-run must not commit hook variables")
 	}
 }
