@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/joho/godotenv v1.5.1
-	github.com/ohler55/ojg v1.28.1
+	github.com/ohler55/ojg v1.28.5
 	gopkg.in/yaml.v3 v3.0.1
 )
 
