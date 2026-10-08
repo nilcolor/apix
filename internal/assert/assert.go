@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ohler55/ojg/jp"
 	"github.com/ohler55/ojg/oj"
 
+	"github.com/nilcolor/apix/internal/extract"
 	"github.com/nilcolor/apix/internal/runner"
 	"github.com/nilcolor/apix/internal/schema"
 	"github.com/nilcolor/apix/internal/vars"
@@ -346,16 +346,14 @@ func bodyValue(path string, body []byte) (any, error) {
 	if len(body) == 0 {
 		return nil, fmt.Errorf("response body is empty")
 	}
-	exprStr := "$" + strings.TrimPrefix(path, "$.body")
 	parsed, err := oj.Parse(body)
 	if err != nil {
 		return nil, fmt.Errorf("body is not valid JSON: %w", err)
 	}
-	expr, err := jp.ParseString(exprStr)
+	matches, err := extract.Query(path, parsed)
 	if err != nil {
-		return nil, fmt.Errorf("invalid JSONPath %q: %w", path, err)
+		return nil, err
 	}
-	matches := expr.Get(parsed)
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("JSONPath %q matched nothing", path)
 	}

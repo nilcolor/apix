@@ -147,6 +147,12 @@ var operatorCases = []opCase{
 	// length_lte
 	{"length_lte string pass", `{"x":"hi"}`, "$.body.x", "length_lte", 5, true},
 	{"length_lte string fail", `{"x":"toolong!!"}`, "$.body.x", "length_lte", 5, false},
+
+	// keys()
+	{"keys contains pass", `{"a":{"n":1},"b":[2]}`, "$.body.keys()", "contains", "b", true},
+	{"keys contains fail", `{"a":{"n":1},"b":[2]}`, "$.body.keys()", "contains", "c", false},
+	{"keys length_lte pass", `{"a":1,"b":2}`, "$.body.keys()", "length_lte", 2, true},
+	{"keys nested equals", `{"d":{"y":1,"x":2}}`, "$.body.d.keys()", "equals", "[x y]", true},
 }
 
 func TestOperators(t *testing.T) {

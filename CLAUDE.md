@@ -188,6 +188,10 @@ assert:
     "$.data.role": admin               # ✗ — missing $.body. prefix
 ```
 
+A trailing `.keys()` (`$.body.keys()`, `$.body.data.keys()`) resolves to the matched object's
+sorted key names. It is stripped before JSONPath evaluation in `extract.Query`, which `extract`,
+`print` and `assert` all share.
+
 ## Assert expression form
 
 `assert:` also accepts a sequence of expression strings instead of the mapping form above.

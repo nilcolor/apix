@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -50,24 +52,47 @@ func PrintSource(source string, resp *runner.Response) (string, error) {
 	}
 }
 
+const keysSuffix = ".keys()"
+
+// Query evaluates a "$.body" source against a parsed JSON body and returns its matches.
+// A trailing ".keys()" replaces the first matched object with its sorted key names.
+func Query(source string, parsed any) ([]any, error) {
+	path, wantKeys := strings.CutSuffix(source, keysSuffix)
+	expr, err := jp.ParseString("$" + strings.TrimPrefix(path, "$.body"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSONPath %q: %w", source, err)
+	}
+	matches := expr.Get(parsed)
+	if !wantKeys || len(matches) == 0 {
+		return matches, nil
+	}
+	obj, ok := matches[0].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%q: keys() needs an object, got %T", source, matches[0])
+	}
+	keys := make([]any, 0, len(obj))
+	for _, k := range slices.Sorted(maps.Keys(obj)) {
+		keys = append(keys, k)
+	}
+	return []any{keys}, nil
+}
+
 func extractJSONPathPretty(source string, body []byte) (string, error) {
 	if len(body) == 0 {
 		return "", fmt.Errorf("response body is empty, cannot apply %q", source)
 	}
-	exprStr := "$" + strings.TrimPrefix(source, "$.body")
 	parsed, err := oj.Parse(body)
 	if err != nil {
 		// Non-JSON body: only allowed when selecting the whole body.
-		if exprStr == "$" {
+		if source == "$.body" {
 			return string(body), nil
 		}
 		return "", fmt.Errorf("response body is not valid JSON: %w", err)
 	}
-	expr, err := jp.ParseString(exprStr)
+	matches, err := Query(source, parsed)
 	if err != nil {
-		return "", fmt.Errorf("invalid JSONPath %q: %w", source, err)
+		return "", err
 	}
-	matches := expr.Get(parsed)
 	if len(matches) == 0 {
 		return "", fmt.Errorf("JSONPath %q matched nothing in response body", source)
 	}
@@ -132,20 +157,15 @@ func extractJSONPath(source string, body []byte) (string, error) {
 		return "", fmt.Errorf("response body is empty, cannot apply JSONPath %q", source)
 	}
 
-	// Transform "$.body" → "$" so the JSONPath operates on the body root.
-	exprStr := "$" + strings.TrimPrefix(source, "$.body")
-
 	parsed, err := oj.Parse(body)
 	if err != nil {
 		return "", fmt.Errorf("response body is not valid JSON: %w", err)
 	}
 
-	expr, err := jp.ParseString(exprStr)
+	matches, err := Query(source, parsed)
 	if err != nil {
-		return "", fmt.Errorf("invalid JSONPath %q: %w", source, err)
+		return "", err
 	}
-
-	matches := expr.Get(parsed)
 	if len(matches) == 0 {
 		return "", fmt.Errorf("JSONPath %q matched nothing in response body", source)
 	}

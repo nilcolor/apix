@@ -162,6 +162,7 @@ At most one of these may be set per step:
     extract:
       token:       $.body.data.access_token    # JSONPath into the parsed body
       first_item:  $.body.items[0].id          # array indexing
+      root_keys:   $.body.keys()               # sorted key names of the matched object
       session_id:  header.X-Session-Id         # response header by name
       status_code: status                      # HTTP status code as a variable
 ```
@@ -171,6 +172,11 @@ At most one of these may be set per step:
 | `$.body.*` | JSONPath into the parsed response body |
 | `header.<Name>` | Response header, case-insensitive |
 | `status` | HTTP status code |
+
+A trailing `.keys()` on a `$.body` source (`$.body.keys()`, `$.body.data.keys()`) yields the
+matched object's key names, sorted, instead of the object itself. It works wherever a source does:
+`extract`, `print`, and `assert` (`"$.body.keys() contains partners"`). Applied to anything but an
+object it is an error.
 
 Extracted variables enter the same flat namespace as `variables:` and are available to every
 later step in the run, including in files that include this one.
@@ -195,6 +201,7 @@ and the existing value is reused — the non-interactive escape hatch for CI.
 
 ```yaml
     print: "$.body"                  # same source prefixes as extract: $.body.*, header.*, status
+    print: "$.body.keys()"           # just the root keys of a large response
     print: "clearance is {{ a_clearance_id }}"   # a {{ }} template instead of a source
 ```
 

@@ -251,3 +251,42 @@ func TestPrintSourceStatus(t *testing.T) {
 		t.Errorf("expected 204, got: %q", got)
 	}
 }
+
+func TestPrintSourceRootKeys(t *testing.T) {
+	r := resp(200, `{"zeta":{"big":[1,2,3]},"alpha":"x","mid":null}`, nil)
+	got, err := PrintSource("$.body.keys()", r)
+	if err != nil {
+		t.Fatalf("PrintSource: %v", err)
+	}
+	want := "[\n  \"alpha\",\n  \"mid\",\n  \"zeta\"\n]"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestExtractNestedKeys(t *testing.T) {
+	r := resp(200, `{"data":{"b":1,"a":2}}`, nil)
+	out, err := Extract(map[string]string{"k": "$.body.data.keys()"}, r)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	if out["k"] != "[a b]" {
+		t.Errorf("k: %q", out["k"])
+	}
+}
+
+func TestKeysOnNonObject(t *testing.T) {
+	r := resp(200, `{"items":[1,2]}`, nil)
+	_, err := PrintSource("$.body.items.keys()", r)
+	if err == nil || !strings.Contains(err.Error(), "keys() needs an object") {
+		t.Errorf("expected non-object error, got %v", err)
+	}
+}
+
+func TestKeysOnMissingPath(t *testing.T) {
+	r := resp(200, `{}`, nil)
+	_, err := Extract(map[string]string{"k": "$.body.nope.keys()"}, r)
+	if err == nil || !strings.Contains(err.Error(), "matched nothing") {
+		t.Errorf("expected matched nothing, got %v", err)
+	}
+}
