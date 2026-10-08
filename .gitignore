@@ -21,4 +21,5 @@ coverage.html
 .claude/
 
 # internal planning docs
-docs
+docs/*
+!docs/backlog/
